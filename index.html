@@ -672,12 +672,14 @@ async function shoot() {
 
 // ── Claude Vision OCR ──
 async function ocrExtract(base64Image) {
-  // ⚠️ Claude APIキーが未設定の場合はモックで動作
-  if (!CLAUDE_API_KEY) {
-    // モックモード: テスト用にダミーコードを返す
-    console.warn('Claude APIキー未設定。モックOCRで動作します。');
-    return ['TEST001', 'SM-BRS01'];
-  }
+  const res = await fetch('https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64Image })
+  });
+  const data = await res.json();
+  return data.codes || [];
+}
 
   const res = await fetch(CLAUDE_API, {
     method: 'POST',
