@@ -621,7 +621,7 @@ function searchCatalog(codes) {
 
   codes.forEach(function(c) {
   promises.push(
-    recoreGet('/products?pa_mpn=' + encodeURIComponent c + '&limit=10').then(function(r) {
+  recoreGet('/products?pa_mpn=' + c + '&limit=10').then(function(r) {
       allProducts = allProducts.concat(r);
     }).catch(function() {})
   );
