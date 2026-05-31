@@ -626,14 +626,6 @@ function searchCatalog(codes) {
     }).catch(function() {})
   );
 });
-    if (c.length >= 4 && c.length <= 20) {
-      promises.push(
-        recoreGet('/products?title=' + encodeURIComponent(c) + '&limit=3').then(function(r) {
-          allProducts = allProducts.concat(r);
-        }).catch(function() {})
-      );
-    }
-  });
 
   return Promise.all(promises).then(function() {
     var unique = allProducts.filter(function(p) {
