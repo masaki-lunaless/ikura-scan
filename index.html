@@ -620,13 +620,12 @@ function searchCatalog(codes) {
 );
 
   codes.forEach(function(c) {
-    if (/^\d{13}$/.test(c)) {
-      promises.push(
-        recoreGet('/products?pa_jan=' + c + '&limit=5').then(function(r) {
-          allProducts = allProducts.concat(r);
-        }).catch(function() {})
-      );
-    }
+  promises.push(
+    recoreGet('/products?pa_mpn=' + encodeURIComponent(c) + '&limit=10').then(function(r) {
+      allProducts = allProducts.concat(r);
+    }).catch(function() {})
+  );
+});
     if (c.length >= 4 && c.length <= 20) {
       promises.push(
         recoreGet('/products?title=' + encodeURIComponent(c) + '&limit=3').then(function(r) {
