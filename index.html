@@ -681,36 +681,7 @@ async function ocrExtract(base64Image) {
   return data.codes || [];
 }
 
-  const res = await fetch(CLAUDE_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-6',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: [{
-          type: 'image',
-          source: { type: 'base64', media_type: 'image/jpeg', data: base64Image }
-        }, {
-          type: 'text',
-          text: `このトレーディングカードの画像から「型番」「商品コード」「JANコード（バーコード数字）」「カード番号」など識別できる英数字コードをすべて抽出してください。
-JSONのみで返答してください: {"codes": ["ABC123", "456789012345"]}`
-        }]
-      }]
-    })
-  });
-  const data = await res.json();
-  const text = data.content?.[0]?.text || '{}';
-  try {
-    const clean = text.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean).codes || [];
-  } catch { return []; }
-}
+
 
 function updateOcrDisplay(codes) {
   const el = document.getElementById('ocr-display');
