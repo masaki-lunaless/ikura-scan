@@ -604,7 +604,7 @@ function searchCatalog(codes) {
 
   codes.forEach(function(c) {
     promises.push(
-      recoreGet('/products?pa_mpn=' + c + '&limit=10').then(function(r) {
+      recoreGet('/products?pa_mpn=' + c.replace('/', '%2F') + '&limit=10')
         allProducts = allProducts.concat(r);
       }).catch(function() {})
     );
