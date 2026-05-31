@@ -31,7 +31,6 @@
     overflow-x: hidden;
   }
 
-  /* ── ヘッダー ── */
   header {
     display: flex;
     align-items: center;
@@ -59,7 +58,6 @@
     letter-spacing: 0.5px;
   }
 
-  /* ── 設定パネル ── */
   #setup-panel {
     padding: 24px 20px;
     display: flex;
@@ -105,10 +103,8 @@
   .btn-primary:active { transform: scale(0.97); opacity: 0.85; }
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* ── メインスキャン画面 ── */
   #scan-panel { display: none; padding: 0 0 100px; }
 
-  /* カウンター */
   .counter-bar {
     display: flex;
     align-items: center;
@@ -131,11 +127,8 @@
     font-family: 'Noto Sans JP', sans-serif;
     transition: all 0.2s;
   }
-  .btn-finish:hover { background: var(--accent); color: #000; }
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
-  .btn-finish:hover:disabled { background: transparent; }
 
-  /* カメラエリア */
   .camera-section {
     padding: 20px;
     display: flex;
@@ -151,11 +144,7 @@
     overflow: hidden;
     border: 1.5px solid var(--border);
   }
-  #video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
+  #video { width: 100%; height: 100%; object-fit: cover; }
   .camera-overlay {
     position: absolute;
     inset: 0;
@@ -170,18 +159,7 @@
     border: 2px solid var(--accent);
     border-radius: 8px;
     box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-    position: relative;
   }
-  .scan-frame::before, .scan-frame::after {
-    content: '';
-    position: absolute;
-    width: 20px; height: 20px;
-    border-color: var(--accent);
-    border-style: solid;
-  }
-  .scan-frame::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; }
-  .scan-frame::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
-
   #canvas { display: none; }
 
   .btn-shoot {
@@ -202,13 +180,8 @@
     transition: all 0.2s;
   }
   .btn-shoot:active { transform: scale(0.97); }
-  .btn-shoot .icon { font-size: 20px; }
 
-  /* ── OCR結果・サジェスト ── */
-  #result-panel {
-    padding: 0 20px 20px;
-    display: none;
-  }
+  #result-panel { padding: 0 20px 20px; display: none; }
 
   .section-title {
     font-size: 11px;
@@ -238,7 +211,6 @@
     letter-spacing: 1px;
   }
 
-  /* サジェストカード */
   .suggest-card {
     background: var(--card-bg);
     border: 1.5px solid var(--border);
@@ -248,7 +220,6 @@
     transition: border-color 0.2s;
   }
   .suggest-card.selected { border-color: var(--accent); }
-  .suggest-card.rejected { opacity: 0.4; }
 
   .suggest-header {
     display: flex;
@@ -257,16 +228,14 @@
     margin-bottom: 10px;
   }
   .suggest-img {
-    width: 56px;
-    height: 56px;
+    width: 56px; height: 56px;
     border-radius: 8px;
     object-fit: cover;
     background: var(--surface2);
     flex-shrink: 0;
   }
   .suggest-img-placeholder {
-    width: 56px;
-    height: 56px;
+    width: 56px; height: 56px;
     border-radius: 8px;
     background: var(--surface2);
     display: flex;
@@ -276,19 +245,8 @@
     flex-shrink: 0;
   }
   .suggest-meta { flex: 1; min-width: 0; }
-  .suggest-title {
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.4;
-    margin-bottom: 4px;
-    word-break: break-all;
-  }
-  .suggest-code {
-    font-size: 11px;
-    color: var(--text2);
-    font-family: monospace;
-    letter-spacing: 0.5px;
-  }
+  .suggest-title { font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 4px; word-break: break-all; }
+  .suggest-code { font-size: 11px; color: var(--text2); font-family: monospace; letter-spacing: 0.5px; }
   .suggest-category {
     display: inline-block;
     font-size: 10px;
@@ -299,10 +257,7 @@
     margin-top: 4px;
   }
 
-  .suggest-actions {
-    display: flex;
-    gap: 10px;
-  }
+  .suggest-actions { display: flex; gap: 10px; }
   .btn-yes {
     flex: 1;
     background: var(--accent);
@@ -314,7 +269,6 @@
     padding: 11px;
     cursor: pointer;
     font-family: 'Noto Sans JP', sans-serif;
-    transition: opacity 0.2s;
   }
   .btn-no {
     flex: 1;
@@ -328,9 +282,7 @@
     cursor: pointer;
     font-family: 'Noto Sans JP', sans-serif;
   }
-  .btn-yes:active, .btn-no:active { opacity: 0.7; }
 
-  /* 選択済みリスト */
   #selected-list { padding: 0 20px 20px; display: none; }
   .selected-item {
     display: flex;
@@ -353,7 +305,6 @@
     padding: 4px;
   }
 
-  /* ── 確認・送信画面 ── */
   #confirm-panel { display: none; padding: 20px; }
   .confirm-card {
     background: var(--surface2);
@@ -372,8 +323,7 @@
   }
   .confirm-item:last-child { border-bottom: none; }
   .confirm-num {
-    width: 22px;
-    height: 22px;
+    width: 22px; height: 22px;
     background: var(--accent2);
     color: white;
     border-radius: 50%;
@@ -416,12 +366,7 @@
     margin-top: 10px;
   }
 
-  /* ── 完了画面 ── */
-  #done-panel {
-    display: none;
-    padding: 60px 20px;
-    text-align: center;
-  }
+  #done-panel { display: none; padding: 60px 20px; text-align: center; }
   .done-icon { font-size: 64px; margin-bottom: 20px; }
   .done-title {
     font-family: 'Syne', sans-serif;
@@ -456,7 +401,6 @@
     font-weight: 700;
   }
 
-  /* ローディング */
   .loading-overlay {
     position: fixed;
     inset: 0;
@@ -479,7 +423,6 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text2); font-size: 14px; }
 
-  /* トースト */
   .toast {
     position: fixed;
     bottom: 24px;
@@ -500,16 +443,9 @@
   .toast.error { border-color: var(--danger); color: var(--danger); }
   .toast.success { border-color: var(--accent); color: var(--accent); }
 
-  /* no-result */
-  .no-result {
-    text-align: center;
-    padding: 30px 20px;
-    color: var(--text2);
-    font-size: 14px;
-  }
+  .no-result { text-align: center; padding: 30px 20px; color: var(--text2); font-size: 14px; }
   .no-result .emoji { font-size: 36px; margin-bottom: 10px; }
 
-  /* 注意書き */
   .notice {
     background: rgba(245,158,11,0.08);
     border: 1px solid rgba(245,158,11,0.25);
@@ -528,30 +464,24 @@
   <div class="badge" id="mode-badge">設定</div>
 </header>
 
-<!-- 設定パネル -->
 <div id="setup-panel">
-  <div class="notice">⚠️ テスト用。APIキーはフロントに直書きしていません。入力してください。</div>
-
+  <div class="notice">⚠️ テスト用プロトタイプ</div>
   <div>
     <div class="field-label">RECORE APIキー</div>
     <input type="password" id="api-key" placeholder="eyJ0..." autocomplete="off">
   </div>
-
   <div>
     <div class="field-label">店舗ID (X-Store-Id)</div>
     <input type="text" id="store-id" placeholder="1" value="1">
   </div>
-
   <button class="btn-primary" onclick="startScan()">📷 スキャン開始</button>
 </div>
 
-<!-- スキャン画面 -->
 <div id="scan-panel">
   <div class="counter-bar">
     <div class="counter-info">選択済み <strong id="selected-count">0</strong> 件</div>
     <button class="btn-finish" id="btn-finish" disabled onclick="showConfirm()">完了 →</button>
   </div>
-
   <div class="camera-section">
     <div class="camera-box">
       <video id="video" autoplay playsinline muted></video>
@@ -561,35 +491,28 @@
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" onclick="shoot()">
-      <span class="icon">📸</span> カードを撮影する
+      <span>📸</span> カードを撮影する
     </button>
   </div>
-
   <div id="result-panel">
     <div class="section-title">OCR 読み取り結果</div>
     <div class="ocr-result" id="ocr-display"></div>
-
     <div class="section-title">カタログ候補</div>
     <div id="suggest-container"></div>
   </div>
-
   <div id="selected-list">
     <div class="section-title">選択済み ✓</div>
     <div id="selected-items-container"></div>
   </div>
 </div>
 
-<!-- 確認パネル -->
 <div id="confirm-panel">
   <div class="section-title">ケース作成確認</div>
   <div class="confirm-card" id="confirm-list"></div>
-  <button class="btn-submit" id="btn-submit" onclick="createCase()">
-    🛒 RECORE に買取ケースを作成する
-  </button>
+  <button class="btn-submit" id="btn-submit" onclick="createCase()">🛒 RECORE に買取ケースを作成する</button>
   <button class="btn-back" onclick="backToScan()">← スキャンに戻る</button>
 </div>
 
-<!-- 完了パネル -->
 <div id="done-panel">
   <div class="done-icon">✅</div>
   <div class="done-title">買取ケース作成完了</div>
@@ -599,62 +522,54 @@
   <button class="btn-restart" onclick="restart()">🔄 次のお客様へ</button>
 </div>
 
-<!-- ローディング -->
 <div class="loading-overlay" id="loading">
   <div class="spinner"></div>
   <div class="loading-text" id="loading-text">処理中...</div>
 </div>
 
-<!-- トースト -->
 <div class="toast" id="toast"></div>
 
 <script>
-// ── 設定 ──
-const BASE_URL = 'https://co-api.recore-pos.com';
-const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
-let CLAUDE_API_KEY = '';
+var BASE_URL = 'https://co-api.recore-pos.com';
+var OCR_PROXY = 'https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy';
 
-// ── 状態 ──
-let apiKey = '';
-let storeId = 1;
-let stream = null;
-let selectedProducts = []; // { product_id, title, code, image_url }
+var apiKey = '';
+var storeId = 1;
+var stream = null;
+var selectedProducts = [];
 
-// ── 初期化 ──
 function startScan() {
   apiKey = document.getElementById('api-key').value.trim();
   storeId = parseInt(document.getElementById('store-id').value.trim()) || 1;
   if (!apiKey) { showToast('APIキーを入力してください', 'error'); return; }
-
   document.getElementById('setup-panel').style.display = 'none';
   document.getElementById('scan-panel').style.display = 'block';
   document.getElementById('mode-badge').textContent = 'スキャン中';
   initCamera();
 }
 
-async function initCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
-    });
-    document.getElementById('video').srcObject = stream;
-  } catch(e) {
+function initCamera() {
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+  }).then(function(s) {
+    stream = s;
+    document.getElementById('video').srcObject = s;
+  }).catch(function(e) {
     showToast('カメラの起動に失敗しました', 'error');
-  }
+  });
 }
 
-// ── 撮影 ──
-async function shoot() {
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
+function shoot() {
+  var video = document.getElementById('video');
+  var canvas = document.getElementById('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   canvas.getContext('2d').drawImage(video, 0, 0);
-  const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+  var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
   showLoading('OCR解析中...');
-  try {
-    const codes = await ocrExtract(base64);
+
+  ocrExtract(base64).then(function(codes) {
     if (!codes || codes.length === 0) {
       showToast('型番を認識できませんでした。再度撮影してください。', 'error');
       hideLoading();
@@ -662,119 +577,143 @@ async function shoot() {
     }
     updateOcrDisplay(codes);
     showLoading('カタログ検索中...');
-    await searchCatalog(codes);
-  } catch(e) {
-    showToast('エラーが発生しました: ' + e.message, 'error');
-  } finally {
+    return searchCatalog(codes);
+  }).catch(function(e) {
+    showToast('エラー: ' + e.message, 'error');
+  }).finally(function() {
     hideLoading();
-  }
+  });
 }
 
-// ── Claude Vision OCR ──
-async function ocrExtract(base64Image) {
-  const res = await fetch('https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy', {
+function ocrExtract(base64Image) {
+  return fetch(OCR_PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64Image })
+    body: JSON.stringify({ base64Image: base64Image })
+  }).then(function(res) {
+    return res.json();
+  }).then(function(data) {
+    return data.codes || [];
   });
-  const data = await res.json();
-  return data.codes || [];
 }
 
-
-
 function updateOcrDisplay(codes) {
-  const el = document.getElementById('ocr-display');
-  el.innerHTML = `認識されたコード: <br>${codes.map(c => `<span class="extracted">${c}</span>`).join(' / ')}`;
+  var el = document.getElementById('ocr-display');
+  el.innerHTML = '認識されたコード: <br>' + codes.map(function(c) {
+    return '<span class="extracted">' + c + '</span>';
+  }).join(' / ');
   document.getElementById('result-panel').style.display = 'block';
 }
 
-// ── RECORE カタログ検索 ──
-async function searchCatalog(codes) {
-  const container = document.getElementById('suggest-container');
+function searchCatalog(codes) {
+  var container = document.getElementById('suggest-container');
   container.innerHTML = '';
+  var allProducts = [];
+  var seen = new Set();
 
-  let allProducts = [];
+  var promises = [];
 
-  // codeで検索
-  try {
-    const r1 = await recoreGet(`/products?codes=${codes.join(',')}&limit=5`);
-    allProducts = [...allProducts, ...r1];
-  } catch(e) { console.log('codes search failed', e); }
+  promises.push(
+    recoreGet('/products?codes=' + codes.join(',') + '&limit=5').then(function(r) {
+      allProducts = allProducts.concat(r);
+    }).catch(function() {})
+  );
 
-  // JANっぽいもの（13桁数字）はpa_janで検索
-  for (const c of codes) {
+  codes.forEach(function(c) {
     if (/^\d{13}$/.test(c)) {
-      try {
-        const r2 = await recoreGet(`/products?pa_jan=${c}&limit=5`);
-        allProducts = [...allProducts, ...r2];
-      } catch(e) { console.log('jan search failed', e); }
+      promises.push(
+        recoreGet('/products?pa_jan=' + c + '&limit=5').then(function(r) {
+          allProducts = allProducts.concat(r);
+        }).catch(function() {})
+      );
     }
-  }
-
-  // titleで部分検索（短いコードや型番っぽいもの）
-  for (const c of codes) {
     if (c.length >= 4 && c.length <= 20) {
-      try {
-        const r3 = await recoreGet(`/products?title=${encodeURIComponent(c)}&limit=3`);
-        allProducts = [...allProducts, ...r3];
-      } catch(e) { console.log('title search failed', e); }
+      promises.push(
+        recoreGet('/products?title=' + encodeURIComponent(c) + '&limit=3').then(function(r) {
+          allProducts = allProducts.concat(r);
+        }).catch(function() {})
+      );
     }
-  }
-
-  // 重複除去
-  const seen = new Set();
-  allProducts = allProducts.filter(p => {
-    if (seen.has(p.id)) return false;
-    seen.add(p.id);
-    return true;
   });
 
-  if (allProducts.length === 0) {
-    container.innerHTML = `<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした<br><small>型番を確認して再度撮影してください</small></div>`;
-    return;
-  }
+  return Promise.all(promises).then(function() {
+    var unique = allProducts.filter(function(p) {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
 
-  allProducts.forEach((p, i) => renderSuggestCard(p, i));
+    if (unique.length === 0) {
+      container.innerHTML = '<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした</div>';
+      return;
+    }
+    unique.forEach(function(p, i) { renderSuggestCard(p, i); });
+  });
 }
 
 function renderSuggestCard(p, idx) {
-  const container = document.getElementById('suggest-container');
-  const imgHtml = p.image_urls?.[0]
-    ? `<img class="suggest-img" src="${p.image_urls[0]}" onerror="this.style.display='none'">`
-    : `<div class="suggest-img-placeholder">🃏</div>`;
+  var container = document.getElementById('suggest-container');
+  var imgHtml = p.image_urls && p.image_urls[0]
+    ? '<img class="suggest-img" src="' + p.image_urls[0] + '">'
+    : '<div class="suggest-img-placeholder">🃏</div>';
 
-  const card = document.createElement('div');
+  var card = document.createElement('div');
   card.className = 'suggest-card';
-  card.id = `suggest-${p.id}`;
-  card.innerHTML = `
-    <div class="suggest-header">
-      ${imgHtml}
-      <div class="suggest-meta">
-        <div class="suggest-title">${p.title || '（タイトルなし）'}</div>
-        <div class="suggest-code">${p.code}</div>
-        ${p.category ? `<div class="suggest-category">${p.category.name}</div>` : ''}
-        ${p.attribute?.brand ? `<div class="suggest-code" style="margin-top:3px">🏷 ${p.attribute.brand}</div>` : ''}
-      </div>
-    </div>
-    <div class="suggest-actions">
-      <button class="btn-yes" onclick="selectProduct(${JSON.stringify(p).replace(/"/g, '&quot;')}, ${idx})">✓ これです</button>
-      <button class="btn-no" onclick="rejectCard(${idx})">✗ 違う</button>
-    </div>
-  `;
+  card.id = 'suggest-' + p.id;
+
+  var dataStr = encodeURIComponent(JSON.stringify(p));
+  card.innerHTML = imgHtml +
+    '<div class="suggest-meta">' +
+      '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
+      '<div class="suggest-code">' + p.code + '</div>' +
+      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '') +
+    '</div>' +
+    '<div class="suggest-actions">' +
+      '<button class="btn-yes" onclick="selectProduct(\'' + dataStr + '\')">✓ これです</button>' +
+      '<button class="btn-no" onclick="showToast(\'スキップしました\', \'\')">✗ 違う</button>' +
+    '</div>';
+
+  var header = document.createElement('div');
+  header.className = 'suggest-header';
+  header.innerHTML = imgHtml +
+    '<div class="suggest-meta">' +
+      '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
+      '<div class="suggest-code">' + p.code + '</div>' +
+      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '') +
+    '</div>';
+
+  var actions = document.createElement('div');
+  actions.className = 'suggest-actions';
+
+  var btnYes = document.createElement('button');
+  btnYes.className = 'btn-yes';
+  btnYes.textContent = '✓ これです';
+  btnYes.onclick = function() { selectProduct(p); };
+
+  var btnNo = document.createElement('button');
+  btnNo.className = 'btn-no';
+  btnNo.textContent = '✗ 違う';
+  btnNo.onclick = function() { showToast('スキップしました', ''); };
+
+  actions.appendChild(btnYes);
+  actions.appendChild(btnNo);
+
+  card.innerHTML = '';
+  card.appendChild(header);
+  card.appendChild(actions);
+
   container.appendChild(card);
 }
 
-function selectProduct(p, idx) {
-  // カードをselected表示
-  const card = document.getElementById(`suggest-${p.id}`);
+function selectProduct(p) {
+  var card = document.getElementById('suggest-' + p.id);
   if (card) {
     card.classList.add('selected');
-    card.querySelector('.suggest-actions').innerHTML = '<span style="color:var(--accent);font-weight:700;font-size:14px">✓ 選択済み</span>';
+    var actions = card.querySelector('.suggest-actions');
+    if (actions) actions.innerHTML = '<span style="color:var(--accent);font-weight:700;font-size:14px">✓ 選択済み</span>';
   }
 
-  // 重複チェック
-  if (selectedProducts.find(x => x.product_id === p.id)) {
+  if (selectedProducts.find(function(x) { return x.product_id === p.id; })) {
     showToast('すでに選択済みです', 'error');
     return;
   }
@@ -782,33 +721,27 @@ function selectProduct(p, idx) {
   selectedProducts.push({
     product_id: p.id,
     title: p.title,
-    code: p.code,
-    image_url: p.image_urls?.[0] || null
+    code: p.code
   });
 
   updateSelectedList();
-  showToast(`「${p.title?.substring(0,20)}」を追加しました ✓`, 'success');
-}
-
-function rejectCard(idx) {
-  // 何もしない（次のカードへ進む）
-  showToast('スキップしました', '');
+  showToast('追加しました ✓', 'success');
 }
 
 function updateSelectedList() {
-  const count = selectedProducts.length;
+  var count = selectedProducts.length;
   document.getElementById('selected-count').textContent = count;
   document.getElementById('btn-finish').disabled = count === 0;
-
-  const container = document.getElementById('selected-items-container');
   document.getElementById('selected-list').style.display = count > 0 ? 'block' : 'none';
-  container.innerHTML = selectedProducts.map((p, i) => `
-    <div class="selected-item">
-      <span class="check">✓</span>
-      <span class="name">${p.title?.substring(0,30) || p.code}</span>
-      <button class="remove" onclick="removeSelected(${i})">✕</button>
-    </div>
-  `).join('');
+
+  var container = document.getElementById('selected-items-container');
+  container.innerHTML = selectedProducts.map(function(p, i) {
+    return '<div class="selected-item">' +
+      '<span class="check">✓</span>' +
+      '<span class="name">' + (p.title || p.code).substring(0, 30) + '</span>' +
+      '<button class="remove" onclick="removeSelected(' + i + ')">✕</button>' +
+      '</div>';
+  }).join('');
 }
 
 function removeSelected(idx) {
@@ -816,22 +749,20 @@ function removeSelected(idx) {
   updateSelectedList();
 }
 
-// ── 確認画面 ──
 function showConfirm() {
   document.getElementById('scan-panel').style.display = 'none';
   document.getElementById('confirm-panel').style.display = 'block';
   document.getElementById('mode-badge').textContent = '確認';
 
-  const list = document.getElementById('confirm-list');
-  list.innerHTML = selectedProducts.map((p, i) => `
-    <div class="confirm-item">
-      <div class="confirm-num">${i+1}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600">${p.title?.substring(0,35) || '（不明）'}</div>
-        <div style="font-size:11px;color:var(--text2);font-family:monospace">${p.code}</div>
-      </div>
-    </div>
-  `).join('');
+  var list = document.getElementById('confirm-list');
+  list.innerHTML = selectedProducts.map(function(p, i) {
+    return '<div class="confirm-item">' +
+      '<div class="confirm-num">' + (i+1) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:13px;font-weight:600">' + (p.title || '（不明）').substring(0, 35) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + '</div>' +
+      '</div></div>';
+  }).join('');
 }
 
 function backToScan() {
@@ -840,37 +771,31 @@ function backToScan() {
   document.getElementById('mode-badge').textContent = 'スキャン中';
 }
 
-// ── RECORE ケース作成 ──
-async function createCase() {
+function createCase() {
   document.getElementById('btn-submit').disabled = true;
   showLoading('ケース作成中...');
 
-  try {
-    const body = {
-      note: `いーくらスキャン - ${new Date().toLocaleString('ja-JP')}`,
-      goods: selectedProducts.map(p => ({
-        product_id: p.product_id,
-        quantity: 1
-      }))
-    };
+  var body = {
+    note: 'いーくらスキャン - ' + new Date().toLocaleString('ja-JP'),
+    goods: selectedProducts.map(function(p) {
+      return { product_id: p.product_id, quantity: 1 };
+    })
+  };
 
-    const result = await recorePost('/v2/bas_cases', body);
-
+  recorePost('/v2/bas_cases', body).then(function(result) {
     hideLoading();
     document.getElementById('confirm-panel').style.display = 'none';
     document.getElementById('done-panel').style.display = 'block';
     document.getElementById('mode-badge').textContent = '完了';
     document.getElementById('done-code').textContent = result.code || '作成済み';
-    document.getElementById('done-detail').textContent = `${selectedProducts.length}件の商品が登録されました`;
-
-  } catch(e) {
+    document.getElementById('done-detail').textContent = selectedProducts.length + '件の商品が登録されました';
+  }).catch(function(e) {
     hideLoading();
     document.getElementById('btn-submit').disabled = false;
     showToast('ケース作成に失敗しました: ' + e.message, 'error');
-  }
+  });
 }
 
-// ── リスタート ──
 function restart() {
   selectedProducts = [];
   document.getElementById('done-panel').style.display = 'none';
@@ -884,23 +809,20 @@ function restart() {
   document.getElementById('mode-badge').textContent = 'スキャン中';
 }
 
-// ── RECORE API ユーティリティ ──
-async function recoreGet(path) {
-  const res = await fetch(BASE_URL + path, {
+function recoreGet(path) {
+  return fetch(BASE_URL + path, {
     headers: {
       'Authorization': apiKey,
       'Content-Type': 'application/json'
     }
+  }).then(function(res) {
+    if (!res.ok) throw new Error('GET ' + path + ' -> ' + res.status);
+    return res.json();
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`GET ${path} → ${res.status}: ${JSON.stringify(err)}`);
-  }
-  return res.json();
 }
 
-async function recorePost(path, body) {
-  const res = await fetch(BASE_URL + path, {
+function recorePost(path, body) {
+  return fetch(BASE_URL + path, {
     method: 'POST',
     headers: {
       'Authorization': apiKey,
@@ -908,15 +830,12 @@ async function recorePost(path, body) {
       'X-Store-Id': String(storeId)
     },
     body: JSON.stringify(body)
+  }).then(function(res) {
+    if (!res.ok) throw new Error('POST ' + path + ' -> ' + res.status);
+    return res.json();
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`POST ${path} → ${res.status}: ${JSON.stringify(err)}`);
-  }
-  return res.json();
 }
 
-// ── UI ユーティリティ ──
 function showLoading(text) {
   document.getElementById('loading-text').textContent = text;
   document.getElementById('loading').classList.add('show');
@@ -925,13 +844,13 @@ function hideLoading() {
   document.getElementById('loading').classList.remove('show');
 }
 
-let toastTimer;
+var toastTimer;
 function showToast(msg, type) {
-  const el = document.getElementById('toast');
+  var el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = `toast ${type} show`;
+  el.className = 'toast ' + type + ' show';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
 }
 </script>
 </body>
