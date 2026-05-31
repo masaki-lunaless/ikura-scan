@@ -98,10 +98,8 @@
     cursor: pointer;
     font-family: 'Noto Sans JP', sans-serif;
     transition: opacity 0.2s, transform 0.1s;
-    letter-spacing: 0.3px;
   }
   .btn-primary:active { transform: scale(0.97); opacity: 0.85; }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
   #scan-panel { display: none; padding: 0 0 100px; }
 
@@ -125,7 +123,6 @@
     border-radius: 20px;
     cursor: pointer;
     font-family: 'Noto Sans JP', sans-serif;
-    transition: all 0.2s;
   }
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
 
@@ -177,7 +174,6 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    transition: all 0.2s;
   }
   .btn-shoot:active { transform: scale(0.97); }
 
@@ -217,7 +213,6 @@
     border-radius: 14px;
     padding: 14px;
     margin-bottom: 10px;
-    transition: border-color 0.2s;
   }
   .suggest-card.selected { border-color: var(--accent); }
 
@@ -226,13 +221,6 @@
     align-items: flex-start;
     gap: 12px;
     margin-bottom: 10px;
-  }
-  .suggest-img {
-    width: 56px; height: 56px;
-    border-radius: 8px;
-    object-fit: cover;
-    background: var(--surface2);
-    flex-shrink: 0;
   }
   .suggest-img-placeholder {
     width: 56px; height: 56px;
@@ -244,9 +232,15 @@
     font-size: 22px;
     flex-shrink: 0;
   }
+  .suggest-img {
+    width: 56px; height: 56px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
   .suggest-meta { flex: 1; min-width: 0; }
   .suggest-title { font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 4px; word-break: break-all; }
-  .suggest-code { font-size: 11px; color: var(--text2); font-family: monospace; letter-spacing: 0.5px; }
+  .suggest-code { font-size: 11px; color: var(--text2); font-family: monospace; }
   .suggest-category {
     display: inline-block;
     font-size: 10px;
@@ -346,11 +340,8 @@
     padding: 18px;
     cursor: pointer;
     font-family: 'Noto Sans JP', sans-serif;
-    transition: opacity 0.2s, transform 0.1s;
-    letter-spacing: 0.5px;
     box-shadow: 0 4px 20px rgba(124,58,237,0.35);
   }
-  .btn-submit:active { transform: scale(0.97); opacity: 0.9; }
   .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .btn-back {
@@ -453,7 +444,6 @@
     padding: 10px 14px;
     font-size: 12px;
     color: var(--warn);
-    margin-bottom: 14px;
   }
 </style>
 </head>
@@ -468,10 +458,10 @@
   <div class="notice">⚠️ テスト用プロトタイプ</div>
   <div>
     <div class="field-label">RECORE APIキー</div>
-    <input type="password" id="api-key" placeholder="eyJ0..." autocomplete="off">
+    <input type="password" id="api-key" placeholder="rc_..." autocomplete="off">
   </div>
   <div>
-    <div class="field-label">店舗ID (X-Store-Id)</div>
+    <div class="field-label">店舗ID</div>
     <input type="text" id="store-id" placeholder="1" value="1">
   </div>
   <button class="btn-primary" onclick="startScan()">📷 スキャン開始</button>
@@ -554,7 +544,7 @@ function initCamera() {
   }).then(function(s) {
     stream = s;
     document.getElementById('video').srcObject = s;
-  }).catch(function(e) {
+  }).catch(function() {
     showToast('カメラの起動に失敗しました', 'error');
   });
 }
@@ -610,22 +600,15 @@ function searchCatalog(codes) {
   container.innerHTML = '';
   var allProducts = [];
   var seen = new Set();
-
   var promises = [];
 
-  promises.push(
-  recoreGet('/products?pa_mpn=' + encodeURIComponent(codes.join(',')) + '&limit=10').then(function(r) {
-    allProducts = allProducts.concat(r);
-  }).catch(function() {})
-);
-
   codes.forEach(function(c) {
-  promises.push(
-  recoreGet('/products?pa_mpn=' + c + '&limit=10').then(function(r) {
-      allProducts = allProducts.concat(r);
-    }).catch(function() {})
-  );
-});
+    promises.push(
+      recoreGet('/products?pa_mpn=' + c + '&limit=10').then(function(r) {
+        allProducts = allProducts.concat(r);
+      }).catch(function() {})
+    );
+  });
 
   return Promise.all(promises).then(function() {
     var unique = allProducts.filter(function(p) {
@@ -638,40 +621,39 @@ function searchCatalog(codes) {
       container.innerHTML = '<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした</div>';
       return;
     }
-    unique.forEach(function(p, i) { renderSuggestCard(p, i); });
+    unique.forEach(function(p) { renderSuggestCard(p); });
   });
 }
 
-function renderSuggestCard(p, idx) {
+function renderSuggestCard(p) {
   var container = document.getElementById('suggest-container');
-  var imgHtml = p.image_urls && p.image_urls[0]
-    ? '<img class="suggest-img" src="' + p.image_urls[0] + '">'
-    : '<div class="suggest-img-placeholder">🃏</div>';
 
   var card = document.createElement('div');
   card.className = 'suggest-card';
   card.id = 'suggest-' + p.id;
 
-  var dataStr = encodeURIComponent(JSON.stringify(p));
-  card.innerHTML = imgHtml +
-    '<div class="suggest-meta">' +
-      '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
-      '<div class="suggest-code">' + p.code + '</div>' +
-      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '') +
-    '</div>' +
-    '<div class="suggest-actions">' +
-      '<button class="btn-yes" onclick="selectProduct(\'' + dataStr + '\')">✓ これです</button>' +
-      '<button class="btn-no" onclick="showToast(\'スキップしました\', \'\')">✗ 違う</button>' +
-    '</div>';
-
   var header = document.createElement('div');
   header.className = 'suggest-header';
-  header.innerHTML = imgHtml +
-    '<div class="suggest-meta">' +
-      '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
-      '<div class="suggest-code">' + p.code + '</div>' +
-      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '') +
-    '</div>';
+
+  var thumb = document.createElement('div');
+  if (p.image_urls && p.image_urls[0]) {
+    thumb = document.createElement('img');
+    thumb.className = 'suggest-img';
+    thumb.src = p.image_urls[0];
+  } else {
+    thumb.className = 'suggest-img-placeholder';
+    thumb.textContent = '🃏';
+  }
+
+  var meta = document.createElement('div');
+  meta.className = 'suggest-meta';
+  meta.innerHTML = '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
+    '<div class="suggest-code">' + p.code + '</div>' +
+    (p.attribute && p.attribute.mpn ? '<div class="suggest-code">型番: ' + p.attribute.mpn + '</div>' : '') +
+    (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '');
+
+  header.appendChild(thumb);
+  header.appendChild(meta);
 
   var actions = document.createElement('div');
   actions.className = 'suggest-actions';
@@ -679,7 +661,7 @@ function renderSuggestCard(p, idx) {
   var btnYes = document.createElement('button');
   btnYes.className = 'btn-yes';
   btnYes.textContent = '✓ これです';
-  btnYes.onclick = function() { selectProduct(p); };
+  btnYes.onclick = function() { selectProduct(p, card, actions); };
 
   var btnNo = document.createElement('button');
   btnNo.className = 'btn-no';
@@ -689,25 +671,18 @@ function renderSuggestCard(p, idx) {
   actions.appendChild(btnYes);
   actions.appendChild(btnNo);
 
-  card.innerHTML = '';
   card.appendChild(header);
   card.appendChild(actions);
-
   container.appendChild(card);
 }
 
-function selectProduct(p) {
-  var card = document.getElementById('suggest-' + p.id);
-  if (card) {
-    card.classList.add('selected');
-    var actions = card.querySelector('.suggest-actions');
-    if (actions) actions.innerHTML = '<span style="color:var(--accent);font-weight:700;font-size:14px">✓ 選択済み</span>';
-  }
-
+function selectProduct(p, card, actions) {
   if (selectedProducts.find(function(x) { return x.product_id === p.id; })) {
     showToast('すでに選択済みです', 'error');
     return;
   }
+  card.classList.add('selected');
+  actions.innerHTML = '<span style="color:var(--accent);font-weight:700;font-size:14px">✓ 選択済み</span>';
 
   selectedProducts.push({
     product_id: p.id,
@@ -748,7 +723,7 @@ function showConfirm() {
   var list = document.getElementById('confirm-list');
   list.innerHTML = selectedProducts.map(function(p, i) {
     return '<div class="confirm-item">' +
-      '<div class="confirm-num">' + (i+1) + '</div>' +
+      '<div class="confirm-num">' + (i + 1) + '</div>' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:13px;font-weight:600">' + (p.title || '（不明）').substring(0, 35) + '</div>' +
         '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + '</div>' +
@@ -839,7 +814,7 @@ var toastTimer;
 function showToast(msg, type) {
   var el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'toast ' + type + ' show';
+  el.className = 'toast ' + (type || '') + ' show';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
 }
