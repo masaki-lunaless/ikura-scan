@@ -614,10 +614,10 @@ function searchCatalog(codes) {
   var promises = [];
 
   promises.push(
-    recoreGet('/products?codes=' + codes.join(',') + '&limit=5').then(function(r) {
-      allProducts = allProducts.concat(r);
-    }).catch(function() {})
-  );
+  recoreGet('/products?pa_mpn=' + encodeURIComponent(codes.join(',')) + '&limit=10').then(function(r) {
+    allProducts = allProducts.concat(r);
+  }).catch(function() {})
+);
 
   codes.forEach(function(c) {
     if (/^\d{13}$/.test(c)) {
