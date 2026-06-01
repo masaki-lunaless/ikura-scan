@@ -237,7 +237,7 @@
     var allProducts = [];
     var seen = {};
     var promises = codes.map(function(c) {
-      var encoded = c.split('/').join('%2F');
+      var encoded = c;
       return fetch(BASE_URL + '/products?pa_mpn=' + encoded + '&limit=10', {
         headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' }
       }).then(function(res) {
