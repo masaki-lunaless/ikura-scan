@@ -6,445 +6,83 @@
 <title>いーくら スキャン</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap');
-
   :root {
-    --bg: #0a0a0f;
-    --surface: #12121a;
-    --surface2: #1a1a26;
-    --border: #2a2a3a;
-    --accent: #00e5a0;
-    --accent2: #7c3aed;
-    --warn: #f59e0b;
-    --danger: #ef4444;
-    --text: #f0f0f8;
-    --text2: #8888aa;
-    --card-bg: #16162a;
+    --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26; --border: #2a2a3a;
+    --accent: #00e5a0; --accent2: #7c3aed; --warn: #f59e0b; --danger: #ef4444;
+    --text: #f0f0f8; --text2: #8888aa; --card-bg: #16162a;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Noto Sans JP', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    position: sticky; top: 0; z-index: 100;
-  }
-  .logo {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: -0.5px;
-    color: var(--accent);
-  }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
   .logo span { color: var(--text2); font-weight: 400; font-size: 13px; margin-left: 6px; }
-  .badge {
-    background: var(--accent2);
-    color: white;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 20px;
-    letter-spacing: 0.5px;
-  }
-
-  #setup-panel {
-    padding: 24px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .field-label {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text2);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-  input[type="text"], input[type="password"] {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text);
-    font-size: 14px;
-    padding: 12px 14px;
-    outline: none;
-    transition: border-color 0.2s;
-    font-family: 'Noto Sans JP', sans-serif;
-  }
+  .badge { background: var(--accent2); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+  #setup-panel { padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .field-label { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+  input[type="text"], input[type="password"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; padding: 12px 14px; outline: none; font-family: 'Noto Sans JP', sans-serif; }
   input:focus { border-color: var(--accent); }
-
-  .btn-primary {
-    width: 100%;
-    background: var(--accent);
-    color: #000;
-    font-weight: 700;
-    font-size: 15px;
-    border: none;
-    border-radius: 12px;
-    padding: 14px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    transition: opacity 0.2s, transform 0.1s;
-  }
-  .btn-primary:active { transform: scale(0.97); opacity: 0.85; }
-
+  .btn-primary { width: 100%; background: var(--accent); color: #000; font-weight: 700; font-size: 15px; border: none; border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
+  .btn-primary:active { opacity: 0.85; }
   #scan-panel { display: none; padding: 0 0 100px; }
-
-  .counter-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-  }
+  .counter-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
   .counter-info { font-size: 13px; color: var(--text2); }
   .counter-info strong { color: var(--accent); font-size: 18px; }
-  .btn-finish {
-    background: transparent;
-    border: 1.5px solid var(--accent);
-    color: var(--accent);
-    font-weight: 700;
-    font-size: 13px;
-    padding: 8px 18px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-  }
+  .btn-finish { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
-
-  .camera-section {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .camera-box {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4/3;
-    background: #000;
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1.5px solid var(--border);
-  }
+  .camera-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); }
   #video { width: 100%; height: 100%; object-fit: cover; }
-  .camera-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-  .scan-frame {
-    width: 70%;
-    aspect-ratio: 1.6;
-    border: 2px solid var(--accent);
-    border-radius: 8px;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-  }
+  .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .scan-frame { width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
   #canvas { display: none; }
-
-  .btn-shoot {
-    width: 100%;
-    background: var(--surface2);
-    border: 1.5px solid var(--border);
-    color: var(--text);
-    font-weight: 700;
-    font-size: 16px;
-    padding: 16px;
-    border-radius: 14px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-  }
-  .btn-shoot:active { transform: scale(0.97); }
-
+  .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   #result-panel { padding: 0 20px 20px; display: none; }
-
-  .section-title {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text2);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    padding-top: 20px;
-  }
-
-  .ocr-result {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
-    font-size: 13px;
-    color: var(--text2);
-    margin-bottom: 4px;
-    line-height: 1.6;
-  }
-  .ocr-result .extracted {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--accent);
-    font-family: 'Syne', monospace;
-    letter-spacing: 1px;
-  }
-
-  .suggest-card {
-    background: var(--card-bg);
-    border: 1.5px solid var(--border);
-    border-radius: 14px;
-    padding: 14px;
-    margin-bottom: 10px;
-  }
+  .section-title { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; padding-top: 20px; }
+  .ocr-result { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--text2); margin-bottom: 4px; line-height: 1.6; }
+  .ocr-result .extracted { font-size: 16px; font-weight: 700; color: var(--accent); font-family: 'Syne', monospace; letter-spacing: 1px; }
+  .suggest-card { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
   .suggest-card.selected { border-color: var(--accent); }
-
-  .suggest-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-  .suggest-img-placeholder {
-    width: 56px; height: 56px;
-    border-radius: 8px;
-    background: var(--surface2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    flex-shrink: 0;
-  }
-  .suggest-img {
-    width: 56px; height: 56px;
-    border-radius: 8px;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
+  .suggest-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .suggest-img-placeholder { width: 56px; height: 56px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .suggest-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
   .suggest-meta { flex: 1; min-width: 0; }
   .suggest-title { font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 4px; word-break: break-all; }
   .suggest-code { font-size: 11px; color: var(--text2); font-family: monospace; }
-  .suggest-category {
-    display: inline-block;
-    font-size: 10px;
-    color: var(--accent2);
-    border: 1px solid var(--accent2);
-    padding: 1px 7px;
-    border-radius: 10px;
-    margin-top: 4px;
-  }
-
+  .suggest-category { display: inline-block; font-size: 10px; color: var(--accent2); border: 1px solid var(--accent2); padding: 1px 7px; border-radius: 10px; margin-top: 4px; }
   .suggest-actions { display: flex; gap: 10px; }
-  .btn-yes {
-    flex: 1;
-    background: var(--accent);
-    color: #000;
-    font-weight: 700;
-    font-size: 14px;
-    border: none;
-    border-radius: 10px;
-    padding: 11px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-  }
-  .btn-no {
-    flex: 1;
-    background: transparent;
-    color: var(--text2);
-    font-weight: 700;
-    font-size: 14px;
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 11px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-  }
-
+  .btn-yes { flex: 1; background: var(--accent); color: #000; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; padding: 11px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
+  .btn-no { flex: 1; background: transparent; color: var(--text2); font-weight: 700; font-size: 14px; border: 1.5px solid var(--border); border-radius: 10px; padding: 11px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   #selected-list { padding: 0 20px 20px; display: none; }
-  .selected-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    background: var(--surface2);
-    border-radius: 10px;
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
+  .selected-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; font-size: 13px; }
   .selected-item .check { color: var(--accent); font-size: 16px; }
   .selected-item .name { flex: 1; }
-  .selected-item .remove {
-    color: var(--danger);
-    background: none;
-    border: none;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px;
-  }
-
+  .selected-item .remove { color: var(--danger); background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px; }
   #confirm-panel { display: none; padding: 20px; }
-  .confirm-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  .confirm-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
+  .confirm-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .confirm-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .confirm-item:last-child { border-bottom: none; }
-  .confirm-num {
-    width: 22px; height: 22px;
-    background: var(--accent2);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    flex-shrink: 0;
-  }
-
-  .btn-submit {
-    width: 100%;
-    background: linear-gradient(135deg, var(--accent2), #a855f7);
-    color: white;
-    font-weight: 700;
-    font-size: 16px;
-    border: none;
-    border-radius: 14px;
-    padding: 18px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    box-shadow: 0 4px 20px rgba(124,58,237,0.35);
-  }
+  .confirm-num { width: 22px; height: 22px; background: var(--accent2); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .btn-submit { width: 100%; background: linear-gradient(135deg, var(--accent2), #a855f7); color: white; font-weight: 700; font-size: 16px; border: none; border-radius: 14px; padding: 18px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; box-shadow: 0 4px 20px rgba(124,58,237,0.35); }
   .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .btn-back {
-    width: 100%;
-    background: transparent;
-    color: var(--text2);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 14px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    font-size: 14px;
-    margin-top: 10px;
-  }
-
+  .btn-back { width: 100%; background: transparent; color: var(--text2); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; margin-top: 10px; }
   #done-panel { display: none; padding: 60px 20px; text-align: center; }
   .done-icon { font-size: 64px; margin-bottom: 20px; }
-  .done-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--accent);
-    margin-bottom: 10px;
-  }
+  .done-title { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--accent); margin-bottom: 10px; }
   .done-sub { color: var(--text2); font-size: 14px; line-height: 1.7; }
-  .done-code {
-    font-family: monospace;
-    font-size: 18px;
-    color: var(--accent);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 20px;
-    margin: 20px 0;
-    letter-spacing: 2px;
-  }
-  .btn-restart {
-    margin-top: 20px;
-    width: 100%;
-    background: var(--surface2);
-    color: var(--text);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 14px;
-    cursor: pointer;
-    font-family: 'Noto Sans JP', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-  }
-
-  .loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10,10,15,0.85);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-    flex-direction: column;
-    gap: 16px;
-  }
+  .done-code { font-family: monospace; font-size: 18px; color: var(--accent); background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; margin: 20px 0; letter-spacing: 2px; }
+  .btn-restart { margin-top: 20px; width: 100%; background: var(--surface2); color: var(--text); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; }
+  .loading-overlay { position: fixed; inset: 0; background: rgba(10,10,15,0.85); display: none; align-items: center; justify-content: center; z-index: 999; flex-direction: column; gap: 16px; }
   .loading-overlay.show { display: flex; }
-  .spinner {
-    width: 40px; height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text2); font-size: 14px; }
-
-  .toast {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(80px);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px 20px;
-    font-size: 13px;
-    color: var(--text);
-    z-index: 999;
-    transition: transform 0.3s ease;
-    white-space: nowrap;
-    max-width: 90vw;
-  }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; font-size: 13px; color: var(--text); z-index: 999; transition: transform 0.3s ease; white-space: nowrap; max-width: 90vw; }
   .toast.show { transform: translateX(-50%) translateY(0); }
   .toast.error { border-color: var(--danger); color: var(--danger); }
   .toast.success { border-color: var(--accent); color: var(--accent); }
-
   .no-result { text-align: center; padding: 30px 20px; color: var(--text2); font-size: 14px; }
   .no-result .emoji { font-size: 36px; margin-bottom: 10px; }
-
-  .notice {
-    background: rgba(245,158,11,0.08);
-    border: 1px solid rgba(245,158,11,0.25);
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 12px;
-    color: var(--warn);
-  }
+  .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--warn); }
 </style>
 </head>
 <body>
@@ -464,25 +102,21 @@
     <div class="field-label">店舗ID</div>
     <input type="text" id="store-id" placeholder="1" value="1">
   </div>
-  <button class="btn-primary" onclick="startScan()">📷 スキャン開始</button>
+  <button class="btn-primary" id="btn-start">📷 スキャン開始</button>
 </div>
 
 <div id="scan-panel">
   <div class="counter-bar">
     <div class="counter-info">選択済み <strong id="selected-count">0</strong> 件</div>
-    <button class="btn-finish" id="btn-finish" disabled onclick="showConfirm()">完了 →</button>
+    <button class="btn-finish" id="btn-finish" disabled>完了 →</button>
   </div>
   <div class="camera-section">
     <div class="camera-box">
       <video id="video" autoplay playsinline muted></video>
-      <div class="camera-overlay">
-        <div class="scan-frame"></div>
-      </div>
+      <div class="camera-overlay"><div class="scan-frame"></div></div>
     </div>
     <canvas id="canvas"></canvas>
-    <button class="btn-shoot" onclick="shoot()">
-      <span>📸</span> カードを撮影する
-    </button>
+    <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
   </div>
   <div id="result-panel">
     <div class="section-title">OCR 読み取り結果</div>
@@ -499,8 +133,8 @@
 <div id="confirm-panel">
   <div class="section-title">ケース作成確認</div>
   <div class="confirm-card" id="confirm-list"></div>
-  <button class="btn-submit" id="btn-submit" onclick="createCase()">🛒 RECORE に買取ケースを作成する</button>
-  <button class="btn-back" onclick="backToScan()">← スキャンに戻る</button>
+  <button class="btn-submit" id="btn-submit">🛒 RECORE に買取ケースを作成する</button>
+  <button class="btn-back" id="btn-back">← スキャンに戻る</button>
 </div>
 
 <div id="done-panel">
@@ -509,7 +143,7 @@
   <div class="done-sub">RECOREに以下のケースが作成されました</div>
   <div class="done-code" id="done-code">BS-XXXXXXXX</div>
   <div class="done-sub" id="done-detail"></div>
-  <button class="btn-restart" onclick="restart()">🔄 次のお客様へ</button>
+  <button class="btn-restart" id="btn-restart">🔄 次のお客様へ</button>
 </div>
 
 <div class="loading-overlay" id="loading">
@@ -520,304 +154,266 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var BASE_URL = 'https://co-api.recore-pos.com';
-var OCR_PROXY = 'https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy';
+(function() {
+  var BASE_URL = 'https://co-api.recore-pos.com';
+  var OCR_PROXY = 'https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy';
+  var apiKey = '';
+  var storeId = 1;
+  var stream = null;
+  var selectedProducts = [];
+  var toastTimer = null;
 
-var apiKey = '';
-var storeId = 1;
-var stream = null;
-var selectedProducts = [];
+  function el(id) { return document.getElementById(id); }
 
-function startScan() {
-  apiKey = document.getElementById('api-key').value.trim();
-  storeId = parseInt(document.getElementById('store-id').value.trim()) || 1;
-  if (!apiKey) { showToast('APIキーを入力してください', 'error'); return; }
-  document.getElementById('setup-panel').style.display = 'none';
-  document.getElementById('scan-panel').style.display = 'block';
-  document.getElementById('mode-badge').textContent = 'スキャン中';
-  initCamera();
-}
+  function showLoading(text) {
+    el('loading-text').textContent = text;
+    el('loading').classList.add('show');
+  }
+  function hideLoading() {
+    el('loading').classList.remove('show');
+  }
+  function showToast(msg, type) {
+    var t = el('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (type ? ' ' + type : '') + ' show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3000);
+  }
 
-function initCamera() {
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
-  }).then(function(s) {
-    stream = s;
-    document.getElementById('video').srcObject = s;
-  }).catch(function() {
-    showToast('カメラの起動に失敗しました', 'error');
-  });
-}
-
-function shoot() {
-  var video = document.getElementById('video');
-  var canvas = document.getElementById('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-  var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-  showLoading('OCR解析中...');
-
-  ocrExtract(base64).then(function(codes) {
-    if (!codes || codes.length === 0) {
-      showToast('型番を認識できませんでした。再度撮影してください。', 'error');
-      hideLoading();
-      return;
-    }
-    updateOcrDisplay(codes);
-    showLoading('カタログ検索中...');
-    return searchCatalog(codes);
-  }).catch(function(e) {
-    showToast('エラー: ' + e.message, 'error');
-  }).finally(function() {
-    hideLoading();
-  });
-}
-
-function ocrExtract(base64Image) {
-  return fetch(OCR_PROXY, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64Image: base64Image })
-  }).then(function(res) {
-    return res.json();
-  }).then(function(data) {
-    return data.codes || [];
-  });
-}
-
-function updateOcrDisplay(codes) {
-  var el = document.getElementById('ocr-display');
-  el.innerHTML = '認識されたコード: <br>' + codes.map(function(c) {
-    return '<span class="extracted">' + c + '</span>';
-  }).join(' / ');
-  document.getElementById('result-panel').style.display = 'block';
-}
-
-function searchCatalog(codes) {
-  var container = document.getElementById('suggest-container');
-  container.innerHTML = '';
-  var allProducts = [];
-  var seen = new Set();
-  var promises = [];
-
-  codes.forEach(function(c) {
-    promises.push(
-      recoreGet('/products?pa_mpn=' + c.replace('/', '%2F') + '&limit=10')
-        allProducts = allProducts.concat(r);
-      }).catch(function() {})
-    );
-  });
-
-  return Promise.all(promises).then(function() {
-    var unique = allProducts.filter(function(p) {
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
-      return true;
+  function startScan() {
+    apiKey = el('api-key').value.trim();
+    storeId = parseInt(el('store-id').value.trim()) || 1;
+    if (!apiKey) { showToast('APIキーを入力してください', 'error'); return; }
+    el('setup-panel').style.display = 'none';
+    el('scan-panel').style.display = 'block';
+    el('mode-badge').textContent = 'スキャン中';
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+    }).then(function(s) {
+      stream = s;
+      el('video').srcObject = s;
+    }).catch(function() {
+      showToast('カメラの起動に失敗しました', 'error');
     });
-
-    if (unique.length === 0) {
-      container.innerHTML = '<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした</div>';
-      return;
-    }
-    unique.forEach(function(p) { renderSuggestCard(p); });
-  });
-}
-
-function renderSuggestCard(p) {
-  var container = document.getElementById('suggest-container');
-
-  var card = document.createElement('div');
-  card.className = 'suggest-card';
-  card.id = 'suggest-' + p.id;
-
-  var header = document.createElement('div');
-  header.className = 'suggest-header';
-
-  var thumb = document.createElement('div');
-  if (p.image_urls && p.image_urls[0]) {
-    thumb = document.createElement('img');
-    thumb.className = 'suggest-img';
-    thumb.src = p.image_urls[0];
-  } else {
-    thumb.className = 'suggest-img-placeholder';
-    thumb.textContent = '🃏';
   }
 
-  var meta = document.createElement('div');
-  meta.className = 'suggest-meta';
-  meta.innerHTML = '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
-    '<div class="suggest-code">' + p.code + '</div>' +
-    (p.attribute && p.attribute.mpn ? '<div class="suggest-code">型番: ' + p.attribute.mpn + '</div>' : '') +
-    (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '');
-
-  header.appendChild(thumb);
-  header.appendChild(meta);
-
-  var actions = document.createElement('div');
-  actions.className = 'suggest-actions';
-
-  var btnYes = document.createElement('button');
-  btnYes.className = 'btn-yes';
-  btnYes.textContent = '✓ これです';
-  btnYes.onclick = function() { selectProduct(p, card, actions); };
-
-  var btnNo = document.createElement('button');
-  btnNo.className = 'btn-no';
-  btnNo.textContent = '✗ 違う';
-  btnNo.onclick = function() { showToast('スキップしました', ''); };
-
-  actions.appendChild(btnYes);
-  actions.appendChild(btnNo);
-
-  card.appendChild(header);
-  card.appendChild(actions);
-  container.appendChild(card);
-}
-
-function selectProduct(p, card, actions) {
-  if (selectedProducts.find(function(x) { return x.product_id === p.id; })) {
-    showToast('すでに選択済みです', 'error');
-    return;
+  function shoot() {
+    var video = el('video');
+    var canvas = el('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    showLoading('OCR解析中...');
+    fetch(OCR_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Image: base64 })
+    }).then(function(res) {
+      return res.json();
+    }).then(function(data) {
+      var codes = data.codes || [];
+      if (!codes.length) {
+        showToast('型番を認識できませんでした。再度撮影してください。', 'error');
+        hideLoading();
+        return;
+      }
+      el('ocr-display').innerHTML = '認識されたコード: <br>' + codes.map(function(c) {
+        return '<span class="extracted">' + c + '</span>';
+      }).join(' / ');
+      el('result-panel').style.display = 'block';
+      showLoading('カタログ検索中...');
+      return searchCatalog(codes);
+    }).catch(function(e) {
+      showToast('エラー: ' + e.message, 'error');
+    }).then(function() {
+      hideLoading();
+    });
   }
-  card.classList.add('selected');
-  actions.innerHTML = '<span style="color:var(--accent);font-weight:700;font-size:14px">✓ 選択済み</span>';
 
-  selectedProducts.push({
-    product_id: p.id,
-    title: p.title,
-    code: p.code
-  });
+  function searchCatalog(codes) {
+    var container = el('suggest-container');
+    container.innerHTML = '';
+    var allProducts = [];
+    var seen = {};
+    var promises = codes.map(function(c) {
+      var encoded = c.split('/').join('%2F');
+      return fetch(BASE_URL + '/products?pa_mpn=' + encoded + '&limit=10', {
+        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' }
+      }).then(function(res) {
+        if (!res.ok) return [];
+        return res.json();
+      }).then(function(r) {
+        if (Array.isArray(r)) allProducts = allProducts.concat(r);
+      }).catch(function() {});
+    });
+    return Promise.all(promises).then(function() {
+      var unique = allProducts.filter(function(p) {
+        if (seen[p.id]) return false;
+        seen[p.id] = true;
+        return true;
+      });
+      if (!unique.length) {
+        container.innerHTML = '<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした</div>';
+        return;
+      }
+      unique.forEach(function(p) { renderCard(p); });
+    });
+  }
 
-  updateSelectedList();
-  showToast('追加しました ✓', 'success');
-}
+  function renderCard(p) {
+    var container = el('suggest-container');
+    var card = document.createElement('div');
+    card.className = 'suggest-card';
 
-function updateSelectedList() {
-  var count = selectedProducts.length;
-  document.getElementById('selected-count').textContent = count;
-  document.getElementById('btn-finish').disabled = count === 0;
-  document.getElementById('selected-list').style.display = count > 0 ? 'block' : 'none';
+    var header = document.createElement('div');
+    header.className = 'suggest-header';
 
-  var container = document.getElementById('selected-items-container');
-  container.innerHTML = selectedProducts.map(function(p, i) {
-    return '<div class="selected-item">' +
-      '<span class="check">✓</span>' +
-      '<span class="name">' + (p.title || p.code).substring(0, 30) + '</span>' +
-      '<button class="remove" onclick="removeSelected(' + i + ')">✕</button>' +
-      '</div>';
-  }).join('');
-}
-
-function removeSelected(idx) {
-  selectedProducts.splice(idx, 1);
-  updateSelectedList();
-}
-
-function showConfirm() {
-  document.getElementById('scan-panel').style.display = 'none';
-  document.getElementById('confirm-panel').style.display = 'block';
-  document.getElementById('mode-badge').textContent = '確認';
-
-  var list = document.getElementById('confirm-list');
-  list.innerHTML = selectedProducts.map(function(p, i) {
-    return '<div class="confirm-item">' +
-      '<div class="confirm-num">' + (i + 1) + '</div>' +
-      '<div style="flex:1;min-width:0">' +
-        '<div style="font-size:13px;font-weight:600">' + (p.title || '（不明）').substring(0, 35) + '</div>' +
-        '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + '</div>' +
-      '</div></div>';
-  }).join('');
-}
-
-function backToScan() {
-  document.getElementById('confirm-panel').style.display = 'none';
-  document.getElementById('scan-panel').style.display = 'block';
-  document.getElementById('mode-badge').textContent = 'スキャン中';
-}
-
-function createCase() {
-  document.getElementById('btn-submit').disabled = true;
-  showLoading('ケース作成中...');
-
-  var body = {
-    note: 'いーくらスキャン - ' + new Date().toLocaleString('ja-JP'),
-    goods: selectedProducts.map(function(p) {
-      return { product_id: p.product_id, quantity: 1 };
-    })
-  };
-
-  recorePost('/v2/bas_cases', body).then(function(result) {
-    hideLoading();
-    document.getElementById('confirm-panel').style.display = 'none';
-    document.getElementById('done-panel').style.display = 'block';
-    document.getElementById('mode-badge').textContent = '完了';
-    document.getElementById('done-code').textContent = result.code || '作成済み';
-    document.getElementById('done-detail').textContent = selectedProducts.length + '件の商品が登録されました';
-  }).catch(function(e) {
-    hideLoading();
-    document.getElementById('btn-submit').disabled = false;
-    showToast('ケース作成に失敗しました: ' + e.message, 'error');
-  });
-}
-
-function restart() {
-  selectedProducts = [];
-  document.getElementById('done-panel').style.display = 'none';
-  document.getElementById('scan-panel').style.display = 'block';
-  document.getElementById('result-panel').style.display = 'none';
-  document.getElementById('selected-list').style.display = 'none';
-  document.getElementById('ocr-display').innerHTML = '';
-  document.getElementById('suggest-container').innerHTML = '';
-  document.getElementById('selected-count').textContent = '0';
-  document.getElementById('btn-finish').disabled = true;
-  document.getElementById('mode-badge').textContent = 'スキャン中';
-}
-
-function recoreGet(path) {
-  return fetch(BASE_URL + path, {
-    headers: {
-      'Authorization': apiKey,
-      'Content-Type': 'application/json'
+    var thumb = document.createElement('div');
+    if (p.image_urls && p.image_urls[0]) {
+      thumb = document.createElement('img');
+      thumb.className = 'suggest-img';
+      thumb.src = p.image_urls[0];
+    } else {
+      thumb.className = 'suggest-img-placeholder';
+      thumb.textContent = '🃏';
     }
-  }).then(function(res) {
-    if (!res.ok) throw new Error('GET ' + path + ' -> ' + res.status);
-    return res.json();
+
+    var meta = document.createElement('div');
+    meta.className = 'suggest-meta';
+    var mpn = (p.attribute && p.attribute.mpn) ? p.attribute.mpn : '';
+    meta.innerHTML =
+      '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
+      '<div class="suggest-code">' + p.code + '</div>' +
+      (mpn ? '<div class="suggest-code">型番: ' + mpn + '</div>' : '') +
+      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '');
+
+    header.appendChild(thumb);
+    header.appendChild(meta);
+
+    var actions = document.createElement('div');
+    actions.className = 'suggest-actions';
+
+    var btnYes = document.createElement('button');
+    btnYes.className = 'btn-yes';
+    btnYes.textContent = '✓ これです';
+    btnYes.onclick = function() {
+      if (selectedProducts.filter(function(x) { return x.product_id === p.id; }).length) {
+        showToast('すでに選択済みです', 'error');
+        return;
+      }
+      card.classList.add('selected');
+      actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 選択済み</span>';
+      selectedProducts.push({ product_id: p.id, title: p.title, code: p.code });
+      updateList();
+      showToast('追加しました ✓', 'success');
+    };
+
+    var btnNo = document.createElement('button');
+    btnNo.className = 'btn-no';
+    btnNo.textContent = '✗ 違う';
+    btnNo.onclick = function() { showToast('スキップしました', ''); };
+
+    actions.appendChild(btnYes);
+    actions.appendChild(btnNo);
+    card.appendChild(header);
+    card.appendChild(actions);
+    container.appendChild(card);
+  }
+
+  function updateList() {
+    var count = selectedProducts.length;
+    el('selected-count').textContent = count;
+    el('btn-finish').disabled = count === 0;
+    el('selected-list').style.display = count > 0 ? 'block' : 'none';
+    el('selected-items-container').innerHTML = selectedProducts.map(function(p, i) {
+      return '<div class="selected-item">' +
+        '<span class="check">✓</span>' +
+        '<span class="name">' + (p.title || p.code).substring(0, 30) + '</span>' +
+        '<button class="remove" data-idx="' + i + '">✕</button>' +
+        '</div>';
+    }).join('');
+    el('selected-items-container').querySelectorAll('.remove').forEach(function(btn) {
+      btn.onclick = function() {
+        selectedProducts.splice(parseInt(btn.getAttribute('data-idx')), 1);
+        updateList();
+      };
+    });
+  }
+
+  function showConfirm() {
+    el('scan-panel').style.display = 'none';
+    el('confirm-panel').style.display = 'block';
+    el('mode-badge').textContent = '確認';
+    el('confirm-list').innerHTML = selectedProducts.map(function(p, i) {
+      return '<div class="confirm-item">' +
+        '<div class="confirm-num">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:600">' + (p.title || '（不明）').substring(0, 35) + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + '</div>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  function createCase() {
+    el('btn-submit').disabled = true;
+    showLoading('ケース作成中...');
+    fetch(BASE_URL + '/v2/bas_cases', {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json',
+        'X-Store-Id': String(storeId)
+      },
+      body: JSON.stringify({
+        note: 'いーくらスキャン - ' + new Date().toLocaleString('ja-JP'),
+        goods: selectedProducts.map(function(p) {
+          return { product_id: p.product_id, quantity: 1 };
+        })
+      })
+    }).then(function(res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.json();
+    }).then(function(result) {
+      hideLoading();
+      el('confirm-panel').style.display = 'none';
+      el('done-panel').style.display = 'block';
+      el('mode-badge').textContent = '完了';
+      el('done-code').textContent = result.code || '作成済み';
+      el('done-detail').textContent = selectedProducts.length + '件の商品が登録されました';
+    }).catch(function(e) {
+      hideLoading();
+      el('btn-submit').disabled = false;
+      showToast('ケース作成に失敗しました: ' + e.message, 'error');
+    });
+  }
+
+  function restart() {
+    selectedProducts = [];
+    el('done-panel').style.display = 'none';
+    el('scan-panel').style.display = 'block';
+    el('result-panel').style.display = 'none';
+    el('selected-list').style.display = 'none';
+    el('ocr-display').innerHTML = '';
+    el('suggest-container').innerHTML = '';
+    el('selected-count').textContent = '0';
+    el('btn-finish').disabled = true;
+    el('mode-badge').textContent = 'スキャン中';
+  }
+
+  // イベント登録（onclickを使わずaddEventListenerで安全に）
+  el('btn-start').addEventListener('click', startScan);
+  el('btn-shoot').addEventListener('click', shoot);
+  el('btn-finish').addEventListener('click', showConfirm);
+  el('btn-submit').addEventListener('click', createCase);
+  el('btn-back').addEventListener('click', function() {
+    el('confirm-panel').style.display = 'none';
+    el('scan-panel').style.display = 'block';
+    el('mode-badge').textContent = 'スキャン中';
   });
-}
+  el('btn-restart').addEventListener('click', restart);
 
-function recorePost(path, body) {
-  return fetch(BASE_URL + path, {
-    method: 'POST',
-    headers: {
-      'Authorization': apiKey,
-      'Content-Type': 'application/json',
-      'X-Store-Id': String(storeId)
-    },
-    body: JSON.stringify(body)
-  }).then(function(res) {
-    if (!res.ok) throw new Error('POST ' + path + ' -> ' + res.status);
-    return res.json();
-  });
-}
-
-function showLoading(text) {
-  document.getElementById('loading-text').textContent = text;
-  document.getElementById('loading').classList.add('show');
-}
-function hideLoading() {
-  document.getElementById('loading').classList.remove('show');
-}
-
-var toastTimer;
-function showToast(msg, type) {
-  var el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast ' + (type || '') + ' show';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3000);
-}
+})();
 </script>
 </body>
 </html>
