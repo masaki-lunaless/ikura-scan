@@ -239,7 +239,7 @@
     var promises = codes.map(function(c) {
       var encoded = c;
       return fetch(BASE_URL + '/products?pa_mpn=' + encoded + '&limit=10', {
-        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' }
+        headers: { 'Authorization': document.getElementById('api-key').value, 'Content-Type': 'application/json' }
       }).then(function(res) {
         if (!res.ok) return [];
         return res.json();
@@ -361,7 +361,7 @@
     fetch(BASE_URL + '/v2/bas_cases', {
       method: 'POST',
       headers: {
-        'Authorization': apiKey,
+        'Authorization': document.getElementById('api-key').value,
         'Content-Type': 'application/json',
         'X-Store-Id': String(storeId)
       },
