@@ -238,7 +238,11 @@
     var seen = {};
     var promises = codes.map(function(c) {
       var encoded = c;
-      return fetch(BASE_URL + '/products?pa_mpn=' + encoded + '&limit=10', {
+      var url = new URL(BASE_URL + '/products');
+      url.searchParams.set('pa_mpn', c);
+      url.searchParams.set('limit', '10');
+      var finalUrl = url.toString().replace(encodeURIComponent(c), c);
+      return fetch(finalUrl, {
         headers: { 'Authorization': document.getElementById('api-key').value, 'Content-Type': 'application/json' }
       }).then(function(res) {
         if (!res.ok) return [];
