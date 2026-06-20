@@ -80,8 +80,9 @@
   .toast.show { transform: translateX(-50%) translateY(0); }
   .toast.error { border-color: var(--danger); color: var(--danger); }
   .toast.success { border-color: var(--accent); color: var(--accent); }
-  .no-result { text-align: center; padding: 30px 20px; color: var(--text2); font-size: 14px; }
+  .no-result { text-align: center; padding: 24px 20px 10px; color: var(--text2); font-size: 14px; }
   .no-result .emoji { font-size: 36px; margin-bottom: 10px; }
+  .no-result-actions { display: flex; gap: 10px; padding: 10px 0 4px; }
   .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--warn); }
 </style>
 </head>
@@ -157,13 +158,13 @@
 (function() {
   var BASE_URL = 'https://co-api.recore-pos.com';
   var OCR_PROXY = 'https://bxvksylspzkzepekblre.supabase.co/functions/v1/ocr-proxy';
-  var apiKey = '';
   var storeId = 1;
   var stream = null;
   var selectedProducts = [];
   var toastTimer = null;
 
   function el(id) { return document.getElementById(id); }
+  function getApiKey() { return el('api-key').value.trim(); }
 
   function showLoading(text) {
     el('loading-text').textContent = text;
@@ -181,9 +182,8 @@
   }
 
   function startScan() {
-    apiKey = el('api-key').value.trim();
+    if (!getApiKey()) { showToast('APIキーを入力してください', 'error'); return; }
     storeId = parseInt(el('store-id').value.trim()) || 1;
-    if (!apiKey) { showToast('APIキーを入力してください', 'error'); return; }
     el('setup-panel').style.display = 'none';
     el('scan-panel').style.display = 'block';
     el('mode-badge').textContent = 'スキャン中';
@@ -237,13 +237,8 @@
     var allProducts = [];
     var seen = {};
     var promises = codes.map(function(c) {
-      var encoded = c;
-      var url = new URL(BASE_URL + '/products');
-      url.searchParams.set('pa_mpn', c);
-      url.searchParams.set('limit', '10');
-      var finalUrl = url.toString().replace(encodeURIComponent(c), c);
-      return fetch(finalUrl, {
-        headers: { 'Authorization': document.getElementById('api-key').value, 'Content-Type': 'application/json' }
+      return fetch(BASE_URL + '/products?pa_mpn=' + c + '&limit=10', {
+        headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' }
       }).then(function(res) {
         if (!res.ok) return [];
         return res.json();
@@ -258,11 +253,47 @@
         return true;
       });
       if (!unique.length) {
-        container.innerHTML = '<div class="no-result"><div class="emoji">🔍</div>一致するカタログが見つかりませんでした</div>';
+        renderNoResult(container);
         return;
       }
       unique.forEach(function(p) { renderCard(p); });
     });
+  }
+
+  function renderNoResult(container) {
+    var wrap = document.createElement('div');
+    wrap.className = 'no-result';
+    wrap.innerHTML = '<div class="emoji">🔍</div>一致するカタログが見つかりませんでした';
+
+    var actions = document.createElement('div');
+    actions.className = 'no-result-actions';
+
+    var btnNext = document.createElement('button');
+    btnNext.className = 'btn-yes';
+    btnNext.textContent = '📸 次のカードへ';
+    btnNext.onclick = function() {
+      el('result-panel').style.display = 'none';
+      el('ocr-display').innerHTML = '';
+      container.innerHTML = '';
+      showToast('次のカードを撮影してください', '');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    var btnDone = document.createElement('button');
+    btnDone.className = 'btn-no';
+    btnDone.textContent = '✅ ここで完了';
+    btnDone.onclick = function() {
+      if (!selectedProducts.length) {
+        showToast('選択済みのカタログがありません', 'error');
+        return;
+      }
+      showConfirm();
+    };
+
+    actions.appendChild(btnNext);
+    actions.appendChild(btnDone);
+    wrap.appendChild(actions);
+    container.appendChild(wrap);
   }
 
   function renderCard(p) {
@@ -286,11 +317,13 @@
     var meta = document.createElement('div');
     meta.className = 'suggest-meta';
     var mpn = (p.attribute && p.attribute.mpn) ? p.attribute.mpn : '';
+    var rarity = (p.attribute && p.attribute.custom_rarity) ? p.attribute.custom_rarity : '';
+    var expansion = (p.attribute && p.attribute.custom_expansion_name) ? p.attribute.custom_expansion_name : '';
     meta.innerHTML =
       '<div class="suggest-title">' + (p.title || '（タイトルなし）') + '</div>' +
       '<div class="suggest-code">' + p.code + '</div>' +
-      (mpn ? '<div class="suggest-code">型番: ' + mpn + '</div>' : '') +
-      (p.category ? '<div class="suggest-category">' + p.category.name + '</div>' : '');
+      (mpn ? '<div class="suggest-code">型番: ' + mpn + (rarity ? ' / ' + rarity : '') + '</div>' : '') +
+      (expansion ? '<div class="suggest-category">' + expansion + '</div>' : '');
 
     header.appendChild(thumb);
     header.appendChild(meta);
@@ -307,16 +340,22 @@
         return;
       }
       card.classList.add('selected');
-      actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 選択済み</span>';
+      actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 選択済み — 次のカードを撮影してください</span>';
       selectedProducts.push({ product_id: p.id, title: p.title, code: p.code });
       updateList();
-      showToast('追加しました ✓', 'success');
+      showToast('追加しました ✓ 次のカードへ', 'success');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     var btnNo = document.createElement('button');
     btnNo.className = 'btn-no';
     btnNo.textContent = '✗ 違う';
-    btnNo.onclick = function() { showToast('スキップしました', ''); };
+    btnNo.onclick = function() {
+      card.style.opacity = '0.35';
+      btnNo.disabled = true;
+      btnYes.disabled = true;
+      showToast('スキップしました', '');
+    };
 
     actions.appendChild(btnYes);
     actions.appendChild(btnNo);
@@ -337,12 +376,15 @@
         '<button class="remove" data-idx="' + i + '">✕</button>' +
         '</div>';
     }).join('');
-    el('selected-items-container').querySelectorAll('.remove').forEach(function(btn) {
-      btn.onclick = function() {
-        selectedProducts.splice(parseInt(btn.getAttribute('data-idx')), 1);
-        updateList();
-      };
-    });
+    var removes = el('selected-items-container').querySelectorAll('.remove');
+    for (var i = 0; i < removes.length; i++) {
+      (function(btn) {
+        btn.onclick = function() {
+          selectedProducts.splice(parseInt(btn.getAttribute('data-idx')), 1);
+          updateList();
+        };
+      })(removes[i]);
+    }
   }
 
   function showConfirm() {
@@ -365,7 +407,7 @@
     fetch(BASE_URL + '/v2/bas_cases', {
       method: 'POST',
       headers: {
-        'Authorization': document.getElementById('api-key').value,
+        'Authorization': getApiKey(),
         'Content-Type': 'application/json',
         'X-Store-Id': String(storeId)
       },
@@ -376,7 +418,11 @@
         })
       })
     }).then(function(res) {
-      if (!res.ok) throw new Error('status ' + res.status);
+      if (!res.ok) {
+        return res.text().then(function(t) {
+          throw new Error('status ' + res.status + ': ' + t);
+        });
+      }
       return res.json();
     }).then(function(result) {
       hideLoading();
@@ -402,10 +448,10 @@
     el('suggest-container').innerHTML = '';
     el('selected-count').textContent = '0';
     el('btn-finish').disabled = true;
+    el('btn-submit').disabled = false;
     el('mode-badge').textContent = 'スキャン中';
   }
 
-  // イベント登録（onclickを使わずaddEventListenerで安全に）
   el('btn-start').addEventListener('click', startScan);
   el('btn-shoot').addEventListener('click', shoot);
   el('btn-finish').addEventListener('click', showConfirm);
@@ -416,7 +462,6 @@
     el('mode-badge').textContent = 'スキャン中';
   });
   el('btn-restart').addEventListener('click', restart);
-
 })();
 </script>
 </body>
