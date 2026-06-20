@@ -238,7 +238,7 @@
     var seen = {};
     var promises = codes.map(function(c) {
       return fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(c) + '&limit=10', {
-        headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' }
+        headers: { 'Authorization': getApiKey() }
       }).then(function(res) {
         if (!res.ok) return [];
         return res.json();
