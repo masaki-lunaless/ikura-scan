@@ -36,6 +36,9 @@
   .scan-frame { width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .manual-input-row { display: flex; gap: 8px; }
+  .manual-input-row input { flex: 1; }
+  .btn-manual { background: var(--accent2); color: white; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; padding: 0 18px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; white-space: nowrap; }
   #result-panel { padding: 0 20px 20px; display: none; }
   .section-title { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; padding-top: 20px; }
   .ocr-result { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--text2); margin-bottom: 4px; line-height: 1.6; }
@@ -49,6 +52,15 @@
   .suggest-title { font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 4px; word-break: break-all; }
   .suggest-code { font-size: 11px; color: var(--text2); font-family: monospace; }
   .suggest-category { display: inline-block; font-size: 10px; color: var(--accent2); border: 1px solid var(--accent2); padding: 1px 7px; border-radius: 10px; margin-top: 4px; }
+  .price-row { display: flex; gap: 8px; margin-top: 8px; }
+  .price-chip { flex: 1; border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .price-chip.buy { background: rgba(0,229,160,0.1); border: 1px solid rgba(0,229,160,0.3); }
+  .price-chip.sell { background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.3); }
+  .price-chip .label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+  .price-chip.buy .label { color: var(--accent); }
+  .price-chip.sell .label { color: #a855f7; }
+  .price-chip .value { font-size: 15px; font-weight: 800; font-family: 'Syne', monospace; }
+  .price-chip .value.na { font-size: 11px; font-weight: 400; color: var(--text2); }
   .suggest-actions { display: flex; gap: 10px; }
   .btn-yes { flex: 1; background: var(--accent); color: #000; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; padding: 11px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-no { flex: 1; background: transparent; color: var(--text2); font-weight: 700; font-size: 14px; border: 1.5px solid var(--border); border-radius: 10px; padding: 11px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
@@ -56,6 +68,7 @@
   .selected-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; font-size: 13px; }
   .selected-item .check { color: var(--accent); font-size: 16px; }
   .selected-item .name { flex: 1; }
+  .selected-item .price { font-size: 11px; color: var(--accent); font-family: 'Syne', monospace; }
   .selected-item .remove { color: var(--danger); background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px; }
   #confirm-panel { display: none; padding: 20px; }
   .confirm-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
@@ -118,6 +131,10 @@
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
+    <div class="manual-input-row">
+      <input type="text" id="manual-mpn" placeholder="読めない時は型番を手入力 (例: 210/184)" autocomplete="off">
+      <button class="btn-manual" id="btn-manual">検索</button>
+    </div>
   </div>
   <div id="result-panel">
     <div class="section-title">OCR 読み取り結果</div>
@@ -180,6 +197,9 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3000);
   }
+  function yen(v) {
+    return '¥' + Number(v).toLocaleString('ja-JP');
+  }
 
   function startScan() {
     if (!getApiKey()) { showToast('APIキーを入力してください', 'error'); return; }
@@ -214,7 +234,7 @@
     }).then(function(data) {
       var codes = data.codes || [];
       if (!codes.length) {
-        showToast('型番を認識できませんでした。再度撮影してください。', 'error');
+        showToast('型番を認識できませんでした。手入力で検索できます。', 'error');
         hideLoading();
         return;
       }
@@ -228,6 +248,21 @@
       showToast('エラー: ' + e.message, 'error');
     }).then(function() {
       hideLoading();
+    });
+  }
+
+  function manualSearch() {
+    var v = el('manual-mpn').value.trim();
+    if (!v) { showToast('型番を入力してください', 'error'); return; }
+    el('ocr-display').innerHTML = '手入力: <span class="extracted">' + v + '</span>';
+    el('result-panel').style.display = 'block';
+    showLoading('カタログ検索中...');
+    searchCatalog([v]).then(function() {
+      hideLoading();
+      el('manual-mpn').value = '';
+    }).catch(function(e) {
+      hideLoading();
+      showToast('エラー: ' + e.message, 'error');
     });
   }
 
@@ -256,8 +291,37 @@
         renderNoResult(container);
         return;
       }
-      unique.forEach(function(p) { renderCard(p); });
+      // 価格ルールを一括取得してからカード描画
+      return fetchPriceRules(unique).then(function(priceMap) {
+        unique.forEach(function(p) { renderCard(p, priceMap[p.id]); });
+      });
     });
+  }
+
+  // 本部商品価格ルールを product_ids で一括取得 → { product_id: {buy, sell} }
+  function fetchPriceRules(products) {
+    var ids = products.map(function(p) { return p.id; }).join(',');
+    return fetch(BASE_URL + '/setting/price_product_company_rules?product_ids=' + ids + '&limit=250', {
+      headers: { 'Authorization': getApiKey() }
+    }).then(function(res) {
+      if (!res.ok) return [];
+      return res.json();
+    }).then(function(rules) {
+      var map = {};
+      if (Array.isArray(rules)) {
+        rules.forEach(function(rule) {
+          var buy = null, sell = null;
+          if (Array.isArray(rule.settings)) {
+            rule.settings.forEach(function(s) {
+              if (s.buy_price && s.buy_price.value != null && buy == null) buy = s.buy_price.value;
+              if (s.sell_price && s.sell_price.value != null && sell == null) sell = s.sell_price.value;
+            });
+          }
+          map[rule.product_id] = { buy: buy, sell: sell };
+        });
+      }
+      return map;
+    }).catch(function() { return {}; });
   }
 
   function renderNoResult(container) {
@@ -296,7 +360,7 @@
     container.appendChild(wrap);
   }
 
-  function renderCard(p) {
+  function renderCard(p, price) {
     var container = el('suggest-container');
     var card = document.createElement('div');
     card.className = 'suggest-card';
@@ -328,6 +392,17 @@
     header.appendChild(thumb);
     header.appendChild(meta);
 
+    // 価格チップ
+    var priceRow = document.createElement('div');
+    priceRow.className = 'price-row';
+    var buyVal = (price && price.buy != null) ? yen(price.buy) : '未設定';
+    var sellVal = (price && price.sell != null) ? yen(price.sell) : '未設定';
+    var buyNa = (price && price.buy != null) ? '' : ' na';
+    var sellNa = (price && price.sell != null) ? '' : ' na';
+    priceRow.innerHTML =
+      '<div class="price-chip buy"><div class="label">買取推奨</div><div class="value' + buyNa + '">' + buyVal + '</div></div>' +
+      '<div class="price-chip sell"><div class="label">販売推奨</div><div class="value' + sellNa + '">' + sellVal + '</div></div>';
+
     var actions = document.createElement('div');
     actions.className = 'suggest-actions';
 
@@ -341,7 +416,13 @@
       }
       card.classList.add('selected');
       actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 選択済み — 次のカードを撮影してください</span>';
-      selectedProducts.push({ product_id: p.id, title: p.title, code: p.code });
+      selectedProducts.push({
+        product_id: p.id,
+        title: p.title,
+        code: p.code,
+        buy: price ? price.buy : null,
+        sell: price ? price.sell : null
+      });
       updateList();
       showToast('追加しました ✓ 次のカードへ', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -360,6 +441,7 @@
     actions.appendChild(btnYes);
     actions.appendChild(btnNo);
     card.appendChild(header);
+    card.appendChild(priceRow);
     card.appendChild(actions);
     container.appendChild(card);
   }
@@ -370,9 +452,11 @@
     el('btn-finish').disabled = count === 0;
     el('selected-list').style.display = count > 0 ? 'block' : 'none';
     el('selected-items-container').innerHTML = selectedProducts.map(function(p, i) {
+      var priceLabel = (p.buy != null) ? '買 ' + yen(p.buy) : '';
       return '<div class="selected-item">' +
         '<span class="check">✓</span>' +
-        '<span class="name">' + (p.title || p.code).substring(0, 30) + '</span>' +
+        '<span class="name">' + (p.title || p.code).substring(0, 24) + '</span>' +
+        (priceLabel ? '<span class="price">' + priceLabel + '</span>' : '') +
         '<button class="remove" data-idx="' + i + '">✕</button>' +
         '</div>';
     }).join('');
@@ -392,11 +476,12 @@
     el('confirm-panel').style.display = 'block';
     el('mode-badge').textContent = '確認';
     el('confirm-list').innerHTML = selectedProducts.map(function(p, i) {
+      var priceLabel = (p.buy != null) ? '買取推奨 ' + yen(p.buy) : '価格未設定';
       return '<div class="confirm-item">' +
         '<div class="confirm-num">' + (i + 1) + '</div>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:13px;font-weight:600">' + (p.title || '（不明）').substring(0, 35) + '</div>' +
-          '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);font-family:monospace">' + p.code + ' ・ ' + priceLabel + '</div>' +
         '</div></div>';
     }).join('');
   }
@@ -454,6 +539,10 @@
 
   el('btn-start').addEventListener('click', startScan);
   el('btn-shoot').addEventListener('click', shoot);
+  el('btn-manual').addEventListener('click', manualSearch);
+  el('manual-mpn').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') manualSearch();
+  });
   el('btn-finish').addEventListener('click', showConfirm);
   el('btn-submit').addEventListener('click', createCase);
   el('btn-back').addEventListener('click', function() {
