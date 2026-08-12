@@ -441,7 +441,7 @@
   }
   function loadScanner() {
     if (scannerPromise) return scannerPromise;
-    scannerPromise = loadScannerScript('https://docs.opencv.org/4.7.0/opencv.js').then(function() {
+    scannerPromise = loadScannerScript('https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/opencv.js').then(function() {
       return new Promise(function(resolve) {
         (function waitCv() {
           if (window.cv && window.cv.Mat) return resolve();
@@ -451,7 +451,7 @@
         })();
       });
     }).then(function() {
-      return loadScannerScript('https://cdn.jsdelivr.net/npm/jscanify@1.2.0/dist/jscanify.min.js');
+      return loadScannerScript('https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.min.js');
     }).then(function() {
       return new jscanify();
     });
