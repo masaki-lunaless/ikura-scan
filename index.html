@@ -402,6 +402,9 @@
     form.innerHTML =
       '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット</div>' +
         '<div class="reg-mpn">' + (lastPrimaryCode || '（なし）') + '</div></div>' +
+      '<div><div class="field-label">カテゴリID <span style="color:var(--danger)">*必須</span></div>' +
+        '<input type="text" id="reg-category" inputmode="numeric" placeholder="トレカのカテゴリID" value="' +
+        (defaultCategoryId != null ? defaultCategoryId : '') + '"></div>' +
       '<div><div class="field-label">商品名 <span style="color:var(--danger)">*必須</span></div>' +
         '<input type="text" id="reg-title" placeholder="例: リザードンex SAR"></div>' +
       '<div><div class="field-label">レアリティ（任意）</div>' +
@@ -422,17 +425,50 @@
     container.appendChild(wrap);
 
     form.querySelector('#reg-submit').onclick = function() {
+      var btn = this;
       var title = form.querySelector('#reg-title').value.trim();
       if (!title) { showToast('商品名を入力してください', 'error'); return; }
+      var cat = parseInt(form.querySelector('#reg-category').value.trim());
+      if (isNaN(cat)) { showToast('カテゴリIDは必須です（未設定だと検索に乗りません）', 'error'); return; }
       var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
       registerCatalog({
         title: title,
         mpn: lastPrimaryCode,
+        categoryId: cat,
         rarity: form.querySelector('#reg-rarity').value.trim(),
         expansion: form.querySelector('#reg-expansion').value.trim(),
         usePhoto: usePhoto
-      });
+      }, btn);
     };
+  }
+
+  // pa_mpn で既存商品を検索（重複ガード / 登録後確認に共用）
+  async function findByMpn(code) {
+    if (!code) return [];
+    var res = await fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10', {
+      headers: { 'Authorization': getApiKey() }
+    });
+    if (!res.ok) return [];
+    var r = await res.json();
+    return Array.isArray(r) ? r : [];
+  }
+
+  // 選択リストへ追加（product_id重複を弾く＝二重送信ガード）
+  function addToSelection(id, title, code, buy, sell) {
+    if (selectedProducts.filter(function(x) { return x.product_id === id; }).length) {
+      showToast('すでに選択済みです', 'error');
+      return false;
+    }
+    selectedProducts.push({ product_id: id, title: title, code: code, buy: buy, sell: sell });
+    updateList();
+    return true;
+  }
+
+  function resetResultView() {
+    el('result-panel').style.display = 'none';
+    el('ocr-display').innerHTML = '';
+    el('suggest-container').innerHTML = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   // ---- 背景除去 → RECORE画像アップロード → 公開URL ----
@@ -473,9 +509,23 @@
   }
 
   // ---- カタログ新規登録 (POST /products) ----
-  async function registerCatalog(f) {
-    showLoading('カタログ登録中...');
+  async function registerCatalog(f, btn) {
+    if (btn) btn.disabled = true; // 二重送信ガード
+    showLoading('重複チェック中...');
     try {
+      // 1) 重複ガード: 同一mpnが既にあればそれを選択して終了
+      if (f.mpn) {
+        var existing = await findByMpn(f.mpn);
+        if (existing.length) {
+          var e0 = existing[0];
+          addToSelection(e0.id, e0.title || f.title, e0.code || '(既存)', null, null);
+          showToast('既に存在したため選択に追加しました', 'success');
+          resetResultView();
+          return;
+        }
+      }
+
+      // 2) 画像（任意）: 背景除去 → RECOREアップロード
       var imageUrls = [];
       if (f.usePhoto && lastShotBase64) {
         showLoading('背景除去中...');
@@ -483,13 +533,14 @@
         showLoading('画像アップロード中...');
         imageUrls.push(await uploadImageToRecore(png));
       }
+
+      // 3) 登録 (category_idは必須で受け取り済み)
       var attribute = {};
       if (f.mpn) attribute.mpn = f.mpn;
       if (f.rarity) attribute.custom_rarity = f.rarity;
       if (f.expansion) attribute.custom_expansion_name = f.expansion;
-      var body = { title: f.title, attribute: attribute };
+      var body = { title: f.title, attribute: attribute, category_id: f.categoryId };
       if (imageUrls.length) body.image_urls = imageUrls;
-      if (defaultCategoryId != null) body.category_id = defaultCategoryId;
 
       showLoading('カタログ登録中...');
       var res = await fetch(BASE_URL + '/products', {
@@ -498,24 +549,28 @@
         body: JSON.stringify(body)
       });
       if (!res.ok) { throw new Error('登録 ' + res.status + ': ' + (await res.text())); }
-      var p = await res.json();
+      var created = await res.json();
 
-      selectedProducts.push({
-        product_id: p.id,
-        title: p.title || f.title,
-        code: p.code || '(新規)',
-        buy: null,
-        sell: null
-      });
-      updateList();
-      showToast('カタログ登録＆選択に追加しました ✓', 'success');
-      el('result-panel').style.display = 'none';
-      el('ocr-display').innerHTML = '';
-      el('suggest-container').innerHTML = '';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // 4) 登録後に再検索で確認: pa_mpnで引けるか＝カテゴリ属性が正しく効いたか
+      var canonical = created, searchable = false;
+      if (f.mpn) {
+        showLoading('検索ヒット確認中...');
+        var found = await findByMpn(f.mpn);
+        var hit = found.filter(function(x) { return x.id === created.id; });
+        if (hit.length) { canonical = hit[0]; searchable = true; }
+      }
+
+      addToSelection(canonical.id, canonical.title || f.title, canonical.code || '(新規)', null, null);
+      resetResultView();
+      if (f.mpn && !searchable) {
+        showToast('登録OK。ただしpa_mpn検索に出ませんでした→カテゴリ属性設定を要確認', 'error');
+      } else {
+        showToast('カタログ登録＆選択に追加しました ✓', 'success');
+      }
     } catch (e) {
       showToast('登録失敗: ' + e.message, 'error');
     } finally {
+      if (btn) btn.disabled = false;
       hideLoading();
     }
   }
