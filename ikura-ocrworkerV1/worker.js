@@ -9,7 +9,7 @@
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const REMOVEBG_API_URL = "https://api.remove.bg/v1.0/removebg";
-const MODEL = "claude-sonnet-4-6"; // Telesatei査定Workerと揃える
+const MODEL = "claude-sonnet-5"; // OCR用: 高解像度Vision(長辺2576px)で小さな型番の読取を強化
 const MAX_TOKENS = 64;
 const MAX_TOKENS_FULL = 300;
 
@@ -105,6 +105,7 @@ async function handleOcr(request, env) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: full ? MAX_TOKENS_FULL : MAX_TOKENS,
+        thinking: { type: "disabled" }, // OCRは短い抽出のみ。思考不要＆max_tokens温存
         messages: [
           {
             role: "user",

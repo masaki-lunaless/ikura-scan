@@ -419,9 +419,11 @@
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
     }
-    var base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
-    lastShotBase64 = base64;
-    var reqBody = { base64Image: base64 };
+    // PNG無圧縮で送信（圧縮ノイズ無し）。ただしClaudeの画像上限(約5MB)を超える時は高品質JPEGへ
+    var dataUrl = canvas.toDataURL('image/png');
+    if (dataUrl.length > 6500000) { dataUrl = canvas.toDataURL('image/jpeg', 0.95); }
+    lastShotBase64 = dataUrl; // data URL のまま保持（Worker側でmedia_type判定）
+    var reqBody = { base64Image: dataUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
     fetch(OCR_PROXY, {
