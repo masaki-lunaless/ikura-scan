@@ -11,9 +11,17 @@ const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const REMOVEBG_API_URL = "https://api.remove.bg/v1.0/removebg";
 const MODEL = "claude-sonnet-4-6"; // Telesatei査定Workerと揃える
 const MAX_TOKENS = 64;
+const MAX_TOKENS_FULL = 300;
 
-const PROMPT =
+// 型番だけ（買取/店間移動モード用・軽量）
+const PROMPT_CODE =
   'カード画像から数字/数字形式の型番のみ抽出。JSON形式のみで返答: {"codes":["210/184"]}';
+
+// フル抽出（カタログ登録モード用・一旦タイトル＋型番のみ）
+const PROMPT_FULL =
+  'トレカ画像から情報を抽出しJSONのみで返答。型番は数字/数字形式(例:1/77)。' +
+  '該当なしは空文字/空配列。余計な文章は出さない。' +
+  '{"codes":["1/77"],"title":"カード名"}';
 
 // CORSヘッダー（全レスポンス共通）
 const CORS_HEADERS = {
@@ -83,6 +91,7 @@ async function handleOcr(request, env) {
   }
 
   const { mediaType, data } = parseImage(base64Image);
+  const full = payload.mode === "full"; // カタログ登録モード=タイトルも抽出
 
   let apiRes;
   try {
@@ -95,13 +104,13 @@ async function handleOcr(request, env) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: MAX_TOKENS,
+        max_tokens: full ? MAX_TOKENS_FULL : MAX_TOKENS,
         messages: [
           {
             role: "user",
             content: [
               { type: "image", source: { type: "base64", media_type: mediaType, data } },
-              { type: "text", text: PROMPT },
+              { type: "text", text: full ? PROMPT_FULL : PROMPT_CODE },
             ],
           },
         ],
@@ -123,7 +132,33 @@ async function handleOcr(request, env) {
     .join("")
     .trim();
 
+  if (full) {
+    const obj = parseJsonLoose(text);
+    return json({
+      codes: Array.isArray(obj.codes) ? obj.codes.filter((c) => typeof c === "string") : extractCodes(text),
+      title: typeof obj.title === "string" ? obj.title : "",
+    });
+  }
   return json({ codes: extractCodes(text) });
+}
+
+// テキストから {...} を取り出してJSONパース（失敗時 {}）
+function parseJsonLoose(text) {
+  if (!text) return {};
+  const cleaned = text.replace(/```(?:json)?/gi, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const m = /\{[\s\S]*\}/.exec(cleaned);
+    if (m) {
+      try {
+        return JSON.parse(m[0]);
+      } catch {
+        /* fallthrough */
+      }
+    }
+  }
+  return {};
 }
 
 // ---- 背景除去（remove.bg）----

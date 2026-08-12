@@ -114,6 +114,16 @@
   .no-result-actions { display: flex; gap: 10px; padding: 10px 0 4px; }
   .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--warn); }
   .btn-reg-toggle { width: 100%; background: transparent; border: 1.5px dashed var(--warn); color: var(--warn); font-weight: 700; font-size: 13px; padding: 11px; border-radius: 10px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; margin-top: 8px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(10,10,15,0.9); display: none; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .modal-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
+  .modal-sub { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 6px; }
+  .modal-actions .btn-primary, .modal-actions .btn-back { margin-top: 0; }
+  .cat-ok { background: rgba(0,229,160,0.1); border: 1px solid rgba(0,229,160,0.3); color: var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+  .cat-ok small { color: var(--warn); }
+  .cat-ng { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -197,6 +207,24 @@
   <button class="btn-restart" id="btn-restart">🔄 続けてスキャン</button>
 </div>
 
+<!-- カテゴリID照合モーダル（カタログ登録モード専用） -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal">
+    <div class="modal-title">🗂 カタログ登録モード</div>
+    <div class="modal-sub">登録先のトレカ カテゴリID（1エキスパンション分）を指定してください。RECOREのカテゴリマスタと照合します。存在しないIDでは開始できません。</div>
+    <div>
+      <div class="field-label">カテゴリID</div>
+      <input type="text" id="cat-id-input" inputmode="numeric" placeholder="例: 123" autocomplete="off">
+    </div>
+    <button class="btn-primary" id="cat-verify">照合する</button>
+    <div id="cat-result"></div>
+    <div class="modal-actions">
+      <button class="btn-back" id="cat-cancel">← モード選択</button>
+      <button class="btn-primary" id="cat-start" style="display:none">このカテゴリで開始 →</button>
+    </div>
+  </div>
+</div>
+
 <div class="loading-overlay" id="loading">
   <div class="spinner"></div>
   <div class="loading-text" id="loading-text">処理中...</div>
@@ -216,6 +244,8 @@
   var toastTimer = null;
   var lastShotBase64 = null;     // 直近の撮影画像(生base64/jpeg)。手入力時はnull
   var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
+  var lastExtract = { title: '' };// カタログ登録: フルOCRの抽出結果
+  var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
 
   function el(id) { return document.getElementById(id); }
   function getApiKey() { return el('api-key').value.trim(); }
@@ -245,6 +275,56 @@
 
   // ===== STEP2 → STEP3 =====
   function selectMode(m) {
+    if (m === 'catalog') { openCatModal(); return; } // 先にカテゴリ照合
+    enterScan(m);
+  }
+
+  // カタログ登録: カテゴリID照合モーダル
+  function openCatModal() {
+    el('mode-panel').style.display = 'none';
+    el('cat-modal').classList.add('show');
+    el('cat-id-input').value = (defaultCategoryId != null ? defaultCategoryId : '');
+    el('cat-result').innerHTML = '';
+    el('cat-start').style.display = 'none';
+    verifiedCategoryId = null;
+  }
+  function closeCatModal() { el('cat-modal').classList.remove('show'); }
+
+  async function verifyCategory() {
+    var id = parseInt(el('cat-id-input').value.trim());
+    if (isNaN(id)) { showToast('カテゴリIDを入力してください', 'error'); return; }
+    el('cat-result').innerHTML = '<div class="reg-check">照合中...</div>';
+    el('cat-start').style.display = 'none';
+    verifiedCategoryId = null;
+    try {
+      var res = await fetch(BASE_URL + '/products/categories?ids=' + id + '&limit=1', {
+        headers: { 'Authorization': getApiKey() }
+      });
+      if (!res.ok) { throw new Error('status ' + res.status); }
+      var arr = await res.json();
+      var cat = Array.isArray(arr) ? arr.filter(function(c) { return c.id === id; })[0] : null;
+      if (!cat) {
+        el('cat-result').innerHTML = '<div class="cat-ng">✗ ID ' + id + ' はRECOREに存在しません。<br>RECORE側でカテゴリを作成してからやり直してください。</div>';
+        return;
+      }
+      var path = (cat.ancestors || []).map(function(a) { return a.name; }).concat([cat.name]).join(' › ');
+      el('cat-result').innerHTML = '<div class="cat-ok">✓ ' + path +
+        (cat.is_leaf === false ? '<br><small>※末端カテゴリではありません（子カテゴリあり）</small>' : '') + '</div>';
+      verifiedCategoryId = id;
+      el('cat-start').style.display = '';
+    } catch (e) {
+      el('cat-result').innerHTML = '<div class="cat-ng">照合エラー: ' + e.message + '</div>';
+    }
+  }
+
+  function startCatalog() {
+    if (verifiedCategoryId == null) { showToast('先にカテゴリを照合してください', 'error'); return; }
+    defaultCategoryId = verifiedCategoryId; // セッション固定
+    closeCatModal();
+    enterScan('catalog');
+  }
+
+  function enterScan(m) {
     mode = m;
     resetSession();
     el('mode-panel').style.display = 'none';
@@ -287,6 +367,7 @@
     el('btn-submit').disabled = false;
     lastShotBase64 = null;
     lastPrimaryCode = '';
+    lastExtract = { title: '' };
   }
 
   // ヘッダ「← モード選択」
@@ -309,13 +390,16 @@
     canvas.getContext('2d').drawImage(video, 0, 0);
     var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
     lastShotBase64 = base64;
+    var reqBody = { base64Image: base64 };
+    if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
     fetch(OCR_PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Image: base64 })
+      body: JSON.stringify(reqBody)
     }).then(function(res) { return res.json(); }).then(function(data) {
       var codes = data.codes || [];
+      lastExtract = { title: (data.title || '') };
       if (!codes.length) {
         if (mode === 'catalog') {
           // 登録モードは読めなくても登録に進む（型番はフォームで手入力）
@@ -346,6 +430,7 @@
     var v = el('manual-mpn').value.trim();
     if (!v) { showToast('型番を入力してください', 'error'); return; }
     lastShotBase64 = null; // 手入力は添付写真なし
+    lastExtract = { title: '' };
     el('ocr-display').innerHTML = '手入力: <span class="extracted">' + v + '</span>';
     el('result-panel').style.display = 'block';
     showLoading('カタログ照合中...');
@@ -567,13 +652,11 @@
     var form = document.createElement('div');
     form.className = 'reg-form';
     form.innerHTML =
+      '<div class="reg-check">登録先カテゴリID: <span style="color:var(--accent);font-weight:700">' + (defaultCategoryId != null ? defaultCategoryId : '未設定') + '</span>（このモードは固定）</div>' +
       '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット（手入力可）</div>' +
         '<input type="text" id="reg-mpn" placeholder="例: 210/184" value="' + (lastPrimaryCode || '') + '"></div>' +
-      '<div><div class="field-label">カテゴリID <span style="color:var(--danger)">*必須</span></div>' +
-        '<input type="text" id="reg-category" inputmode="numeric" placeholder="トレカのカテゴリID" value="' +
-        (defaultCategoryId != null ? defaultCategoryId : '') + '"></div>' +
       '<div><div class="field-label">商品名 <span style="color:var(--danger)">*必須</span></div>' +
-        '<input type="text" id="reg-title" placeholder="例: リザードンex SAR"></div>' +
+        '<input type="text" id="reg-title" placeholder="例: リザードンex SAR" value="' + (lastExtract.title || '').replace(/"/g, '&quot;') + '"></div>' +
       '<div><div class="field-label">レアリティ（任意）</div>' +
         '<input type="text" id="reg-rarity" placeholder="例: SAR"></div>' +
       '<div><div class="field-label">弾名（任意）</div>' +
@@ -597,9 +680,8 @@
       var btn = this;
       var title = form.querySelector('#reg-title').value.trim();
       if (!title) { showToast('商品名を入力してください', 'error'); return; }
-      var cat = parseInt(form.querySelector('#reg-category').value.trim());
-      if (isNaN(cat)) { showToast('カテゴリIDは必須です（未設定だと検索に乗りません）', 'error'); return; }
-      defaultCategoryId = cat; // 次回プリフィル用に記憶
+      if (defaultCategoryId == null) { showToast('カテゴリ未設定です。モードを選び直してください', 'error'); return; }
+      var cat = defaultCategoryId; // セッション固定カテゴリ
       var mpn = form.querySelector('#reg-mpn').value.trim();
       var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
       registerCatalog({
@@ -837,6 +919,10 @@
   // ===== イベント =====
   el('btn-start').addEventListener('click', goModeSelect);
   el('btn-modeback').addEventListener('click', backToMode);
+  el('cat-verify').addEventListener('click', verifyCategory);
+  el('cat-id-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') verifyCategory(); });
+  el('cat-start').addEventListener('click', startCatalog);
+  el('cat-cancel').addEventListener('click', function() { closeCatModal(); el('mode-panel').style.display = 'block'; });
   var modeCards = document.querySelectorAll('.mode-card');
   for (var i = 0; i < modeCards.length; i++) {
     (function(card) {
