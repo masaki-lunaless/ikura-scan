@@ -411,7 +411,8 @@
   // ===== 撮影 / 手入力 =====
   function shoot() {
     var video = el('video');
-    var canvas = captureCardCanvas(0.2); // 枠+20%マージン
+    // カタログ=縦枠にカードがぴったり→タイト / 買取・店間移動=型番位置が様々→切れ防止で広め
+    var canvas = captureCardCanvas(mode === 'catalog' ? 0.15 : 0.5);
     if (!canvas) { // 動画未準備時はフルフレームでフォールバック
       canvas = el('canvas');
       canvas.width = video.videoWidth;
