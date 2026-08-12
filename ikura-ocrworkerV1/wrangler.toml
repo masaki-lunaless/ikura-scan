@@ -1,0 +1,6 @@
+name = "ikura-ocr-proxy"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+# APIキーはコードに書かず、wrangler secret で登録する:
+#   npx wrangler secret put CLAUDE_API_KEY

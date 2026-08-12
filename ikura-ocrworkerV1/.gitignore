@@ -1,0 +1,11 @@
+# secrets / local env（絶対にコミットしない）
+.dev.vars
+.env
+*.local
+
+# wrangler
+.wrangler/
+
+# deps / os
+node_modules/
+.DS_Store
