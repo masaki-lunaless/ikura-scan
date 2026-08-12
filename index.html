@@ -47,6 +47,7 @@
   .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); }
   .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
+  #freeze { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 3; background: #000; }
   .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
   .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
   .scan-frame.portrait { width: auto; height: 82%; aspect-ratio: 63/88; } /* 外枠=撮影範囲(背景込み) */
@@ -172,6 +173,7 @@
     <div class="camera-box" id="camera-box">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div><div class="card-guide" id="card-guide"></div></div>
+      <img id="freeze" alt="">
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
@@ -373,6 +375,7 @@
     el('selected-count').textContent = '0';
     el('btn-finish').disabled = true;
     el('btn-submit').disabled = false;
+    el('freeze').style.display = 'none';
     lastShotBase64 = null;
     lastPrimaryCode = '';
     lastExtract = { title: '' };
@@ -424,19 +427,34 @@
     c.getContext('2d').drawImage(v, 0, 0);
     return c;
   }
+  // canvasを長辺maxEdgeに縮小したJPEG data URL（remove.bgの読取上限対策）
+  function toBoundedJpeg(srcCanvas, maxEdge, q) {
+    var w = srcCanvas.width, h = srcCanvas.height;
+    var scale = Math.min(1, maxEdge / Math.max(w, h));
+    if (scale >= 1) return srcCanvas.toDataURL('image/jpeg', q);
+    var t = document.createElement('canvas');
+    t.width = Math.max(1, Math.round(w * scale));
+    t.height = Math.max(1, Math.round(h * scale));
+    t.getContext('2d').drawImage(srcCanvas, 0, 0, t.width, t.height);
+    return t.toDataURL('image/jpeg', q);
+  }
 
   // ===== 撮影 / 手入力 =====
   function shoot() {
+    el('freeze').style.display = 'none'; // 直前の凍結を解除してから撮影
     var ocrUrl;
     if (mode === 'catalog') {
       // OCR用: 内枠(カード)に画素を集中
       ocrUrl = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.12) || fullFrameCanvas());
-      // 背景除去用: 外枠(カード+背景リング)を渡す→remove.bgが前景検出、crop=trueで最終トリム
-      lastShotBase64 = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.03) || fullFrameCanvas());
+      // 背景除去用: 外枠(カード+背景リング)を縮小JPEGで（remove.bgの読取上限内に）
+      lastShotBase64 = toBoundedJpeg(captureFrameCanvas(el('scan-frame'), 0.03) || fullFrameCanvas(), 1400, 0.85);
     } else {
       ocrUrl = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.5) || fullFrameCanvas());
       lastShotBase64 = ocrUrl; // 買取/店間移動は背景除去なし
     }
+    // iPhone風: 撮れた写真を凍結表示（ライブ映像の揺れを隠す）
+    el('freeze').src = fullFrameCanvas().toDataURL('image/jpeg', 0.6);
+    el('freeze').style.display = 'block';
     var reqBody = { base64Image: ocrUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
@@ -559,6 +577,7 @@
     el('result-panel').style.display = 'none';
     el('ocr-display').innerHTML = '';
     el('suggest-container').innerHTML = '';
+    el('freeze').style.display = 'none'; // ライブ映像に戻す
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
