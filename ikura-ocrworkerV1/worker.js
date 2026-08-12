@@ -187,6 +187,8 @@ async function handleRemoveBg(request, env) {
   form.append("image_file_b64", data);
   form.append("size", "auto"); // プランに応じた最大解像度（無料枠はpreview相当）
   form.append("format", "png"); // 透過PNG
+  form.append("crop", "true"); // 背景除去後、被写体(カード)の外接矩形にピッタリ切り抜き
+  form.append("crop_margin", "0"); // 余白なし
 
   let res;
   try {
