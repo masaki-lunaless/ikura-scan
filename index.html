@@ -45,9 +45,11 @@
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
   .camera-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
   .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); }
+  .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
   .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
   .scan-frame { width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
+  .scan-frame.portrait { width: auto; height: 80%; aspect-ratio: 63/88; } /* トレカ実寸 63x88mm 縦 */
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .manual-input-row { display: flex; gap: 8px; }
@@ -154,13 +156,13 @@
     <button class="btn-finish" id="btn-finish" disabled>完了 →</button>
   </div>
   <div class="camera-section">
-    <div class="camera-box">
+    <div class="camera-box" id="camera-box">
       <video id="video" autoplay playsinline muted></video>
-      <div class="camera-overlay"><div class="scan-frame"></div></div>
+      <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div></div>
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
-    <div class="manual-input-row">
+    <div class="manual-input-row" id="manual-row">
       <input type="text" id="manual-mpn" placeholder="読めない時は型番を手入力 (例: 210/184)" autocomplete="off">
       <button class="btn-manual" id="btn-manual">検索</button>
     </div>
@@ -254,6 +256,11 @@
     el('counter-label').textContent = (m === 'catalog') ? '登録済み' : '選択済み';
     el('selected-title').textContent = (m === 'catalog') ? '登録済み ✓' : '選択済み ✓';
     el('suggest-title').textContent = (m === 'catalog') ? 'カタログ照合' : 'カタログ候補';
+    // カタログ登録モードのみ: カメラ枠を縦(トレカ実寸)にし、型番検索欄を隠す
+    var portrait = (m === 'catalog');
+    el('camera-box').classList.toggle('portrait', portrait);
+    el('scan-frame').classList.toggle('portrait', portrait);
+    el('manual-row').style.display = portrait ? 'none' : 'flex';
     startCamera();
   }
 
@@ -310,6 +317,16 @@
     }).then(function(res) { return res.json(); }).then(function(data) {
       var codes = data.codes || [];
       if (!codes.length) {
+        if (mode === 'catalog') {
+          // 登録モードは読めなくても登録に進む（型番はフォームで手入力）
+          lastPrimaryCode = '';
+          el('ocr-display').innerHTML = '型番を自動読取できませんでした（フォームで手入力可）';
+          el('result-panel').style.display = 'block';
+          var c = el('suggest-container'); c.innerHTML = '';
+          renderCatalogRegister(c);
+          hideLoading();
+          return;
+        }
         showToast('型番を認識できませんでした。手入力で検索できます。', 'error');
         hideLoading();
         return;
@@ -550,8 +567,8 @@
     var form = document.createElement('div');
     form.className = 'reg-form';
     form.innerHTML =
-      '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット</div>' +
-        '<div class="reg-mpn">' + (lastPrimaryCode || '（なし）') + '</div></div>' +
+      '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット（手入力可）</div>' +
+        '<input type="text" id="reg-mpn" placeholder="例: 210/184" value="' + (lastPrimaryCode || '') + '"></div>' +
       '<div><div class="field-label">カテゴリID <span style="color:var(--danger)">*必須</span></div>' +
         '<input type="text" id="reg-category" inputmode="numeric" placeholder="トレカのカテゴリID" value="' +
         (defaultCategoryId != null ? defaultCategoryId : '') + '"></div>' +
@@ -583,10 +600,11 @@
       var cat = parseInt(form.querySelector('#reg-category').value.trim());
       if (isNaN(cat)) { showToast('カテゴリIDは必須です（未設定だと検索に乗りません）', 'error'); return; }
       defaultCategoryId = cat; // 次回プリフィル用に記憶
+      var mpn = form.querySelector('#reg-mpn').value.trim();
       var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
       registerCatalog({
         title: title,
-        mpn: lastPrimaryCode,
+        mpn: mpn,
         categoryId: cat,
         rarity: form.querySelector('#reg-rarity').value.trim(),
         expansion: form.querySelector('#reg-expansion').value.trim(),
