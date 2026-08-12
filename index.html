@@ -13,10 +13,11 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; min-height: 100vh; overflow-x: hidden; }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; gap: 10px; }
   .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
   .logo span { color: var(--text2); font-weight: 400; font-size: 13px; margin-left: 6px; }
-  .badge { background: var(--accent2); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+  .badge { background: var(--accent2); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .btn-modeback { background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; white-space: nowrap; }
   #setup-panel { padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
   input[type="text"], input[type="password"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; padding: 12px 14px; outline: none; font-family: 'Noto Sans JP', sans-serif; }
@@ -30,9 +31,12 @@
   .reg-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
   .reg-check input { width: auto; }
   .btn-reg { background: var(--warn); color: #000; font-weight: 700; border: none; border-radius: 10px; padding: 12px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; }
-  .btn-reg-toggle { width: 100%; background: transparent; border: 1.5px dashed var(--warn); color: var(--warn); font-weight: 700; font-size: 13px; padding: 11px; border-radius: 10px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; margin-top: 8px; }
   .btn-primary { width: 100%; background: var(--accent); color: #000; font-weight: 700; font-size: 15px; border: none; border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-primary:active { opacity: 0.85; }
+  #mode-panel { display: none; padding: 8px 20px 40px; }
+  .mode-card { width: 100%; text-align: left; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 16px; margin-bottom: 12px; cursor: pointer; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 17px; font-weight: 700; display: flex; flex-direction: column; gap: 4px; }
+  .mode-card:active { border-color: var(--accent); }
+  .mode-card small { font-size: 12px; font-weight: 400; color: var(--text2); }
   #scan-panel { display: none; padding: 0 0 100px; }
   .counter-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
   .counter-info { font-size: 13px; color: var(--text2); }
@@ -107,15 +111,18 @@
   .no-result .emoji { font-size: 36px; margin-bottom: 10px; }
   .no-result-actions { display: flex; gap: 10px; padding: 10px 0 4px; }
   .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--warn); }
+  .btn-reg-toggle { width: 100%; background: transparent; border: 1.5px dashed var(--warn); color: var(--warn); font-weight: 700; font-size: 13px; padding: 11px; border-radius: 10px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; margin-top: 8px; }
 </style>
 </head>
 <body>
 
 <header>
+  <button class="btn-modeback" id="btn-modeback" style="display:none">← モード選択</button>
   <div class="logo">いーくら <span>スキャン</span></div>
   <div class="badge" id="mode-badge">設定</div>
 </header>
 
+<!-- STEP1: APIキー -->
 <div id="setup-panel">
   <div class="notice">⚠️ テスト用プロトタイプ</div>
   <div>
@@ -126,23 +133,24 @@
     <div class="field-label">店舗ID</div>
     <input type="text" id="store-id" placeholder="1" value="1">
   </div>
-  <div>
-    <div class="field-label">ケース種別</div>
-    <select id="case-type">
-      <option value="bas">買取ケース</option>
-      <option value="big">一般仕入れ（疑似店間移動）</option>
-    </select>
-  </div>
-  <div>
-    <div class="field-label">デフォルトカテゴリID（カタログ登録用・任意）</div>
-    <input type="text" id="default-category" placeholder="例: 123" autocomplete="off">
-  </div>
-  <button class="btn-primary" id="btn-start">📷 スキャン開始</button>
+  <button class="btn-primary" id="btn-start">モード選択へ →</button>
 </div>
 
+<!-- STEP2: モード選択 -->
+<div id="mode-panel">
+  <div class="section-title" style="padding-top:24px">モードを選択</div>
+  <button class="mode-card" data-mode="bas">🛒 買取モード
+    <small>型番を読み取り、買取ケースを作成</small></button>
+  <button class="mode-card" data-mode="big">🚚 店間移動モード
+    <small>型番を読み取り、一般仕入れケースを作成（疑似店間移動）</small></button>
+  <button class="mode-card" data-mode="catalog">🗂 カタログ登録モード
+    <small>背景除去＋カテゴリ指定で商品マスタに登録</small></button>
+</div>
+
+<!-- STEP3: スキャン -->
 <div id="scan-panel">
   <div class="counter-bar">
-    <div class="counter-info">選択済み <strong id="selected-count">0</strong> 件</div>
+    <div class="counter-info"><span id="counter-label">選択済み</span> <strong id="selected-count">0</strong> 件</div>
     <button class="btn-finish" id="btn-finish" disabled>完了 →</button>
   </div>
   <div class="camera-section">
@@ -160,29 +168,31 @@
   <div id="result-panel">
     <div class="section-title">OCR 読み取り結果</div>
     <div class="ocr-result" id="ocr-display"></div>
-    <div class="section-title">カタログ候補</div>
+    <div class="section-title" id="suggest-title">カタログ候補</div>
     <div id="suggest-container"></div>
   </div>
   <div id="selected-list">
-    <div class="section-title">選択済み ✓</div>
+    <div class="section-title" id="selected-title">選択済み ✓</div>
     <div id="selected-items-container"></div>
   </div>
 </div>
 
+<!-- 確認（買取/店間移動のみ） -->
 <div id="confirm-panel">
-  <div class="section-title">ケース作成確認</div>
+  <div class="section-title" id="confirm-title">ケース作成確認</div>
   <div class="confirm-card" id="confirm-list"></div>
-  <button class="btn-submit" id="btn-submit">🛒 RECORE に買取ケースを作成する</button>
+  <button class="btn-submit" id="btn-submit">🛒 RECORE にケースを作成する</button>
   <button class="btn-back" id="btn-back">← スキャンに戻る</button>
 </div>
 
+<!-- 完了 -->
 <div id="done-panel">
   <div class="done-icon">✅</div>
-  <div class="done-title">買取ケース作成完了</div>
-  <div class="done-sub">RECOREに以下のケースが作成されました</div>
+  <div class="done-title" id="done-title">完了</div>
+  <div class="done-sub" id="done-sub"></div>
   <div class="done-code" id="done-code">BS-XXXXXXXX</div>
   <div class="done-sub" id="done-detail"></div>
-  <button class="btn-restart" id="btn-restart">🔄 次のお客様へ</button>
+  <button class="btn-restart" id="btn-restart">🔄 続けてスキャン</button>
 </div>
 
 <div class="loading-overlay" id="loading">
@@ -197,24 +207,21 @@
   var BASE_URL = 'https://co-api.recore-pos.com';
   var OCR_PROXY = 'https://ikura-ocr-proxy.lunaless.workers.dev';
   var storeId = 1;
-  var caseType = 'bas';          // 'bas'=買取ケース / 'big'=一般仕入れ
-  var defaultCategoryId = null;  // カタログ登録時の既定カテゴリID
+  var mode = 'bas';              // 'bas'=買取 / 'big'=店間移動 / 'catalog'=カタログ登録
+  var defaultCategoryId = null;  // カタログ登録: 直近入力を記憶してプリフィル
   var stream = null;
-  var selectedProducts = [];
+  var selectedProducts = [];     // bas/big=ケース対象 / catalog=登録済み一覧
   var toastTimer = null;
   var lastShotBase64 = null;     // 直近の撮影画像(生base64/jpeg)。手入力時はnull
-  var lastPrimaryCode = '';      // 直近の検索コード(カタログ登録のmpn候補)
+  var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
 
   function el(id) { return document.getElementById(id); }
   function getApiKey() { return el('api-key').value.trim(); }
+  function isCase() { return mode === 'bas' || mode === 'big'; }
+  function modeLabel(m) { return m === 'bas' ? '買取' : m === 'big' ? '店間移動' : 'カタログ登録'; }
 
-  function showLoading(text) {
-    el('loading-text').textContent = text;
-    el('loading').classList.add('show');
-  }
-  function hideLoading() {
-    el('loading').classList.remove('show');
-  }
+  function showLoading(text) { el('loading-text').textContent = text; el('loading').classList.add('show'); }
+  function hideLoading() { el('loading').classList.remove('show'); }
   function showToast(msg, type) {
     var t = el('toast');
     t.textContent = msg;
@@ -222,19 +229,36 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3000);
   }
-  function yen(v) {
-    return '¥' + Number(v).toLocaleString('ja-JP');
-  }
+  function yen(v) { return '¥' + Number(v).toLocaleString('ja-JP'); }
 
-  function startScan() {
+  // ===== STEP1 → STEP2 =====
+  function goModeSelect() {
     if (!getApiKey()) { showToast('APIキーを入力してください', 'error'); return; }
     storeId = parseInt(el('store-id').value.trim()) || 1;
-    caseType = el('case-type').value;
-    var cat = parseInt(el('default-category').value.trim());
-    defaultCategoryId = isNaN(cat) ? null : cat;
     el('setup-panel').style.display = 'none';
+    el('mode-panel').style.display = 'block';
+    el('mode-badge').textContent = 'モード選択';
+    el('btn-modeback').style.display = 'none';
+  }
+
+  // ===== STEP2 → STEP3 =====
+  function selectMode(m) {
+    mode = m;
+    resetSession();
+    el('mode-panel').style.display = 'none';
+    el('confirm-panel').style.display = 'none';
+    el('done-panel').style.display = 'none';
     el('scan-panel').style.display = 'block';
-    el('mode-badge').textContent = 'スキャン中';
+    el('btn-modeback').style.display = '';
+    el('mode-badge').textContent = modeLabel(m);
+    el('counter-label').textContent = (m === 'catalog') ? '登録済み' : '選択済み';
+    el('selected-title').textContent = (m === 'catalog') ? '登録済み ✓' : '選択済み ✓';
+    el('suggest-title').textContent = (m === 'catalog') ? 'カタログ照合' : 'カタログ候補';
+    startCamera();
+  }
+
+  function startCamera() {
+    if (stream) return;
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
     }).then(function(s) {
@@ -245,6 +269,31 @@
     });
   }
 
+  function resetSession() {
+    selectedProducts = [];
+    el('result-panel').style.display = 'none';
+    el('selected-list').style.display = 'none';
+    el('ocr-display').innerHTML = '';
+    el('suggest-container').innerHTML = '';
+    el('selected-count').textContent = '0';
+    el('btn-finish').disabled = true;
+    el('btn-submit').disabled = false;
+    lastShotBase64 = null;
+    lastPrimaryCode = '';
+  }
+
+  // ヘッダ「← モード選択」
+  function backToMode() {
+    resetSession();
+    el('scan-panel').style.display = 'none';
+    el('confirm-panel').style.display = 'none';
+    el('done-panel').style.display = 'none';
+    el('mode-panel').style.display = 'block';
+    el('mode-badge').textContent = 'モード選択';
+    el('btn-modeback').style.display = 'none';
+  }
+
+  // ===== 撮影 / 手入力 =====
   function shoot() {
     var video = el('video');
     var canvas = el('canvas');
@@ -252,15 +301,13 @@
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
     var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-    lastShotBase64 = base64; // カタログ登録の画像添付に流用
+    lastShotBase64 = base64;
     showLoading('OCR解析中...');
     fetch(OCR_PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Image: base64 })
-    }).then(function(res) {
-      return res.json();
-    }).then(function(data) {
+    }).then(function(res) { return res.json(); }).then(function(data) {
       var codes = data.codes || [];
       if (!codes.length) {
         showToast('型番を認識できませんでした。手入力で検索できます。', 'error');
@@ -271,22 +318,20 @@
         return '<span class="extracted">' + c + '</span>';
       }).join(' / ');
       el('result-panel').style.display = 'block';
-      showLoading('カタログ検索中...');
+      showLoading('カタログ照合中...');
       return searchCatalog(codes);
     }).catch(function(e) {
       showToast('エラー: ' + e.message, 'error');
-    }).then(function() {
-      hideLoading();
-    });
+    }).then(function() { hideLoading(); });
   }
 
   function manualSearch() {
     var v = el('manual-mpn').value.trim();
     if (!v) { showToast('型番を入力してください', 'error'); return; }
-    lastShotBase64 = null; // 手入力時は添付写真なし
+    lastShotBase64 = null; // 手入力は添付写真なし
     el('ocr-display').innerHTML = '手入力: <span class="extracted">' + v + '</span>';
     el('result-panel').style.display = 'block';
-    showLoading('カタログ検索中...');
+    showLoading('カタログ照合中...');
     searchCatalog([v]).then(function() {
       hideLoading();
       el('manual-mpn').value = '';
@@ -296,6 +341,7 @@
     });
   }
 
+  // ===== カタログ照合 =====
   function searchCatalog(codes) {
     lastPrimaryCode = (codes && codes[0]) ? codes[0] : '';
     var container = el('suggest-container');
@@ -305,39 +351,33 @@
     var promises = codes.map(function(c) {
       return fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(c) + '&limit=10', {
         headers: { 'Authorization': getApiKey() }
-      }).then(function(res) {
-        if (!res.ok) return [];
-        return res.json();
-      }).then(function(r) {
-        if (Array.isArray(r)) allProducts = allProducts.concat(r);
-      }).catch(function() {});
+      }).then(function(res) { return res.ok ? res.json() : []; })
+        .then(function(r) { if (Array.isArray(r)) allProducts = allProducts.concat(r); })
+        .catch(function() {});
     });
     return Promise.all(promises).then(function() {
       var unique = allProducts.filter(function(p) {
-        if (seen[p.id]) return false;
-        seen[p.id] = true;
-        return true;
+        if (seen[p.id]) return false; seen[p.id] = true; return true;
       });
-      if (!unique.length) {
-        renderNoResult(container);
+
+      if (mode === 'catalog') {
+        if (unique.length) { renderExists(container, unique); }
+        else { renderCatalogRegister(container); }
         return;
       }
-      // 価格ルールを一括取得してからカード描画
+      // bas / big
+      if (!unique.length) { renderNoResult(container); return; }
       return fetchPriceRules(unique).then(function(priceMap) {
         unique.forEach(function(p) { renderCard(p, priceMap[p.id]); });
       });
     });
   }
 
-  // 本部商品価格ルールを product_ids で一括取得 → { product_id: {buy, sell} }
   function fetchPriceRules(products) {
     var ids = products.map(function(p) { return p.id; }).join(',');
     return fetch(BASE_URL + '/setting/price_product_company_rules?product_ids=' + ids + '&limit=250', {
       headers: { 'Authorization': getApiKey() }
-    }).then(function(res) {
-      if (!res.ok) return [];
-      return res.json();
-    }).then(function(rules) {
+    }).then(function(res) { return res.ok ? res.json() : []; }).then(function(rules) {
       var map = {};
       if (Array.isArray(rules)) {
         rules.forEach(function(rule) {
@@ -355,108 +395,10 @@
     }).catch(function() { return {}; });
   }
 
-  function renderNoResult(container) {
-    var wrap = document.createElement('div');
-    wrap.className = 'no-result';
-    wrap.innerHTML = '<div class="emoji">🔍</div>一致するカタログが見つかりませんでした';
-
-    var actions = document.createElement('div');
-    actions.className = 'no-result-actions';
-
-    var btnNext = document.createElement('button');
-    btnNext.className = 'btn-yes';
-    btnNext.textContent = '📸 次のカードへ';
-    btnNext.onclick = function() {
-      el('result-panel').style.display = 'none';
-      el('ocr-display').innerHTML = '';
-      container.innerHTML = '';
-      showToast('次のカードを撮影してください', '');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    var btnDone = document.createElement('button');
-    btnDone.className = 'btn-no';
-    btnDone.textContent = '✅ ここで完了';
-    btnDone.onclick = function() {
-      if (!selectedProducts.length) {
-        showToast('選択済みのカタログがありません', 'error');
-        return;
-      }
-      showConfirm();
-    };
-
-    actions.appendChild(btnNext);
-    actions.appendChild(btnDone);
-    wrap.appendChild(actions);
-
-    // ＋ カタログ新規登録トグル
-    var toggle = document.createElement('button');
-    toggle.className = 'btn-reg-toggle';
-    toggle.textContent = '＋ カタログに新規登録';
-    var photoNote = (lastShotBase64)
-      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 撮影写真を背景除去して添付</label>'
-      : '<div class="reg-check">（手入力のため添付写真なし）</div>';
-    var form = document.createElement('div');
-    form.className = 'reg-form';
-    form.style.display = 'none';
-    form.innerHTML =
-      '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット</div>' +
-        '<div class="reg-mpn">' + (lastPrimaryCode || '（なし）') + '</div></div>' +
-      '<div><div class="field-label">カテゴリID <span style="color:var(--danger)">*必須</span></div>' +
-        '<input type="text" id="reg-category" inputmode="numeric" placeholder="トレカのカテゴリID" value="' +
-        (defaultCategoryId != null ? defaultCategoryId : '') + '"></div>' +
-      '<div><div class="field-label">商品名 <span style="color:var(--danger)">*必須</span></div>' +
-        '<input type="text" id="reg-title" placeholder="例: リザードンex SAR"></div>' +
-      '<div><div class="field-label">レアリティ（任意）</div>' +
-        '<input type="text" id="reg-rarity" placeholder="例: SAR"></div>' +
-      '<div><div class="field-label">弾名（任意）</div>' +
-        '<input type="text" id="reg-expansion" placeholder="例: 黒炎の支配者"></div>' +
-      photoNote +
-      '<button class="btn-reg" id="reg-submit">カタログ登録して選択に追加</button>';
-
-    toggle.onclick = function() {
-      var open = form.style.display === 'none';
-      form.style.display = open ? 'flex' : 'none';
-      toggle.textContent = open ? '× 登録フォームを閉じる' : '＋ カタログに新規登録';
-    };
-
-    wrap.appendChild(toggle);
-    wrap.appendChild(form);
-    container.appendChild(wrap);
-
-    form.querySelector('#reg-submit').onclick = function() {
-      var btn = this;
-      var title = form.querySelector('#reg-title').value.trim();
-      if (!title) { showToast('商品名を入力してください', 'error'); return; }
-      var cat = parseInt(form.querySelector('#reg-category').value.trim());
-      if (isNaN(cat)) { showToast('カテゴリIDは必須です（未設定だと検索に乗りません）', 'error'); return; }
-      var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
-      registerCatalog({
-        title: title,
-        mpn: lastPrimaryCode,
-        categoryId: cat,
-        rarity: form.querySelector('#reg-rarity').value.trim(),
-        expansion: form.querySelector('#reg-expansion').value.trim(),
-        usePhoto: usePhoto
-      }, btn);
-    };
-  }
-
-  // pa_mpn で既存商品を検索（重複ガード / 登録後確認に共用）
-  async function findByMpn(code) {
-    if (!code) return [];
-    var res = await fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10', {
-      headers: { 'Authorization': getApiKey() }
-    });
-    if (!res.ok) return [];
-    var r = await res.json();
-    return Array.isArray(r) ? r : [];
-  }
-
-  // 選択リストへ追加（product_id重複を弾く＝二重送信ガード）
+  // 選択リストへ追加（product_id重複を弾く）
   function addToSelection(id, title, code, buy, sell) {
     if (selectedProducts.filter(function(x) { return x.product_id === id; }).length) {
-      showToast('すでに選択済みです', 'error');
+      showToast('すでにリストにあります', 'error');
       return false;
     }
     selectedProducts.push({ product_id: id, title: title, code: code, buy: buy, sell: sell });
@@ -471,110 +413,7 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // ---- 背景除去 → RECORE画像アップロード → 公開URL ----
-  function b64ToBlob(b64, mime) {
-    var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
-    for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime });
-  }
-
-  async function removeBg(base64) {
-    var res = await fetch(OCR_PROXY + '/removebg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Image: base64 })
-    });
-    if (!res.ok) { throw new Error('背景除去 ' + res.status + ': ' + (await res.text())); }
-    return (await res.json()).base64Image; // 透過PNGのbase64
-  }
-
-  async function uploadImageToRecore(pngBase64) {
-    // 1) 署名URL取得
-    var r1 = await fetch(BASE_URL + '/upload/public', {
-      method: 'POST',
-      headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mime_type: 'image/png' })
-    });
-    if (!r1.ok) { throw new Error('署名URL取得 ' + r1.status + ': ' + (await r1.text())); }
-    var info = await r1.json(); // { file_key, url, mime_type }
-    // 2) 署名URLへPUT
-    var r2 = await fetch(info.url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: b64ToBlob(pngBase64, 'image/png')
-    });
-    if (!r2.ok) { throw new Error('画像PUT ' + r2.status + ': ' + (await r2.text())); }
-    // 3) 公開URL = クエリ(?以降)を除去
-    return info.url.split('?')[0];
-  }
-
-  // ---- カタログ新規登録 (POST /products) ----
-  async function registerCatalog(f, btn) {
-    if (btn) btn.disabled = true; // 二重送信ガード
-    showLoading('重複チェック中...');
-    try {
-      // 1) 重複ガード: 同一mpnが既にあればそれを選択して終了
-      if (f.mpn) {
-        var existing = await findByMpn(f.mpn);
-        if (existing.length) {
-          var e0 = existing[0];
-          addToSelection(e0.id, e0.title || f.title, e0.code || '(既存)', null, null);
-          showToast('既に存在したため選択に追加しました', 'success');
-          resetResultView();
-          return;
-        }
-      }
-
-      // 2) 画像（任意）: 背景除去 → RECOREアップロード
-      var imageUrls = [];
-      if (f.usePhoto && lastShotBase64) {
-        showLoading('背景除去中...');
-        var png = await removeBg(lastShotBase64);
-        showLoading('画像アップロード中...');
-        imageUrls.push(await uploadImageToRecore(png));
-      }
-
-      // 3) 登録 (category_idは必須で受け取り済み)
-      var attribute = {};
-      if (f.mpn) attribute.mpn = f.mpn;
-      if (f.rarity) attribute.custom_rarity = f.rarity;
-      if (f.expansion) attribute.custom_expansion_name = f.expansion;
-      var body = { title: f.title, attribute: attribute, category_id: f.categoryId };
-      if (imageUrls.length) body.image_urls = imageUrls;
-
-      showLoading('カタログ登録中...');
-      var res = await fetch(BASE_URL + '/products', {
-        method: 'POST',
-        headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) { throw new Error('登録 ' + res.status + ': ' + (await res.text())); }
-      var created = await res.json();
-
-      // 4) 登録後に再検索で確認: pa_mpnで引けるか＝カテゴリ属性が正しく効いたか
-      var canonical = created, searchable = false;
-      if (f.mpn) {
-        showLoading('検索ヒット確認中...');
-        var found = await findByMpn(f.mpn);
-        var hit = found.filter(function(x) { return x.id === created.id; });
-        if (hit.length) { canonical = hit[0]; searchable = true; }
-      }
-
-      addToSelection(canonical.id, canonical.title || f.title, canonical.code || '(新規)', null, null);
-      resetResultView();
-      if (f.mpn && !searchable) {
-        showToast('登録OK。ただしpa_mpn検索に出ませんでした→カテゴリ属性設定を要確認', 'error');
-      } else {
-        showToast('カタログ登録＆選択に追加しました ✓', 'success');
-      }
-    } catch (e) {
-      showToast('登録失敗: ' + e.message, 'error');
-    } finally {
-      if (btn) btn.disabled = false;
-      hideLoading();
-    }
-  }
-
+  // ===== 買取/店間移動: カタログ候補カード =====
   function renderCard(p, price) {
     var container = el('suggest-container');
     var card = document.createElement('div');
@@ -607,7 +446,6 @@
     header.appendChild(thumb);
     header.appendChild(meta);
 
-    // 価格チップ
     var priceRow = document.createElement('div');
     priceRow.className = 'price-row';
     var buyVal = (price && price.buy != null) ? yen(price.buy) : '未設定';
@@ -625,22 +463,12 @@
     btnYes.className = 'btn-yes';
     btnYes.textContent = '✓ これです';
     btnYes.onclick = function() {
-      if (selectedProducts.filter(function(x) { return x.product_id === p.id; }).length) {
-        showToast('すでに選択済みです', 'error');
-        return;
+      if (addToSelection(p.id, p.title, p.code, price ? price.buy : null, price ? price.sell : null)) {
+        card.classList.add('selected');
+        actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 追加済み — 次のカードを撮影してください</span>';
+        showToast('追加しました ✓ 次のカードへ', 'success');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      card.classList.add('selected');
-      actions.innerHTML = '<span style="color:var(--accent);font-weight:700">✓ 選択済み — 次のカードを撮影してください</span>';
-      selectedProducts.push({
-        product_id: p.id,
-        title: p.title,
-        code: p.code,
-        buy: price ? price.buy : null,
-        sell: price ? price.sell : null
-      });
-      updateList();
-      showToast('追加しました ✓ 次のカードへ', 'success');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     var btnNo = document.createElement('button');
@@ -648,8 +476,7 @@
     btnNo.textContent = '✗ 違う';
     btnNo.onclick = function() {
       card.style.opacity = '0.35';
-      btnNo.disabled = true;
-      btnYes.disabled = true;
+      btnNo.disabled = true; btnYes.disabled = true;
       showToast('スキップしました', '');
     };
 
@@ -661,6 +488,223 @@
     container.appendChild(card);
   }
 
+  // ===== 買取/店間移動: 一致なし → スルー =====
+  function renderNoResult(container) {
+    var wrap = document.createElement('div');
+    wrap.className = 'no-result';
+    wrap.innerHTML = '<div class="emoji">🔍</div>マスタに一致なし（RECORE側で新規登録してください）';
+
+    var actions = document.createElement('div');
+    actions.className = 'no-result-actions';
+
+    var btnNext = document.createElement('button');
+    btnNext.className = 'btn-yes';
+    btnNext.textContent = '📸 次のカードへ';
+    btnNext.onclick = function() { resetResultView(); showToast('次のカードを撮影してください', ''); };
+
+    var btnDone = document.createElement('button');
+    btnDone.className = 'btn-no';
+    btnDone.textContent = '✅ ここで完了';
+    btnDone.onclick = function() {
+      if (!selectedProducts.length) { showToast('選択済みがありません', 'error'); return; }
+      showConfirm();
+    };
+
+    actions.appendChild(btnNext);
+    actions.appendChild(btnDone);
+    wrap.appendChild(actions);
+    container.appendChild(wrap);
+  }
+
+  // ===== カタログ登録: 既にマスタあり =====
+  function renderExists(container, products) {
+    var p = products[0];
+    var wrap = document.createElement('div');
+    wrap.className = 'suggest-card';
+    var mpn = (p.attribute && p.attribute.mpn) ? p.attribute.mpn : (lastPrimaryCode || '');
+    wrap.innerHTML =
+      '<div class="suggest-title">✅ 既にマスタに登録済み</div>' +
+      '<div class="suggest-code" style="margin-top:6px">' + (p.title || '（タイトルなし）') + '</div>' +
+      '<div class="suggest-code">' + p.code + (mpn ? ' / 型番: ' + mpn : '') + '</div>';
+    var actions = document.createElement('div');
+    actions.className = 'no-result-actions';
+    var btnNext = document.createElement('button');
+    btnNext.className = 'btn-yes';
+    btnNext.textContent = '📸 次のカードへ';
+    btnNext.onclick = function() { resetResultView(); showToast('次のカードを撮影してください', ''); };
+    actions.appendChild(btnNext);
+    wrap.appendChild(actions);
+    container.appendChild(wrap);
+  }
+
+  // ===== カタログ登録: 新規登録フォーム =====
+  function renderCatalogRegister(container) {
+    var wrap = document.createElement('div');
+    wrap.className = 'no-result';
+    wrap.innerHTML = '<div class="emoji">🗂</div>マスタ未登録 — 新規登録します';
+
+    var photoNote = (lastShotBase64)
+      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 撮影写真を背景除去して添付</label>'
+      : '<div class="reg-check">（手入力のため添付写真なし）</div>';
+
+    var form = document.createElement('div');
+    form.className = 'reg-form';
+    form.innerHTML =
+      '<div><div class="field-label">型番 (mpn) ／ 次回から検索ヒット</div>' +
+        '<div class="reg-mpn">' + (lastPrimaryCode || '（なし）') + '</div></div>' +
+      '<div><div class="field-label">カテゴリID <span style="color:var(--danger)">*必須</span></div>' +
+        '<input type="text" id="reg-category" inputmode="numeric" placeholder="トレカのカテゴリID" value="' +
+        (defaultCategoryId != null ? defaultCategoryId : '') + '"></div>' +
+      '<div><div class="field-label">商品名 <span style="color:var(--danger)">*必須</span></div>' +
+        '<input type="text" id="reg-title" placeholder="例: リザードンex SAR"></div>' +
+      '<div><div class="field-label">レアリティ（任意）</div>' +
+        '<input type="text" id="reg-rarity" placeholder="例: SAR"></div>' +
+      '<div><div class="field-label">弾名（任意）</div>' +
+        '<input type="text" id="reg-expansion" placeholder="例: 黒炎の支配者"></div>' +
+      photoNote +
+      '<button class="btn-reg" id="reg-submit">マスタ登録する</button>';
+
+    var actions = document.createElement('div');
+    actions.className = 'no-result-actions';
+    var btnSkip = document.createElement('button');
+    btnSkip.className = 'btn-no';
+    btnSkip.textContent = '⏭ 登録せず次へ';
+    btnSkip.onclick = function() { resetResultView(); showToast('次のカードを撮影してください', ''); };
+    actions.appendChild(btnSkip);
+
+    wrap.appendChild(form);
+    wrap.appendChild(actions);
+    container.appendChild(wrap);
+
+    form.querySelector('#reg-submit').onclick = function() {
+      var btn = this;
+      var title = form.querySelector('#reg-title').value.trim();
+      if (!title) { showToast('商品名を入力してください', 'error'); return; }
+      var cat = parseInt(form.querySelector('#reg-category').value.trim());
+      if (isNaN(cat)) { showToast('カテゴリIDは必須です（未設定だと検索に乗りません）', 'error'); return; }
+      defaultCategoryId = cat; // 次回プリフィル用に記憶
+      var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
+      registerCatalog({
+        title: title,
+        mpn: lastPrimaryCode,
+        categoryId: cat,
+        rarity: form.querySelector('#reg-rarity').value.trim(),
+        expansion: form.querySelector('#reg-expansion').value.trim(),
+        usePhoto: usePhoto
+      }, btn);
+    };
+  }
+
+  // pa_mpn で既存検索（重複ガード / 登録後確認に共用）
+  async function findByMpn(code) {
+    if (!code) return [];
+    var res = await fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10', {
+      headers: { 'Authorization': getApiKey() }
+    });
+    if (!res.ok) return [];
+    var r = await res.json();
+    return Array.isArray(r) ? r : [];
+  }
+
+  // ===== 画像: 背景除去 → RECORE アップロード → 公開URL =====
+  function b64ToBlob(b64, mime) {
+    var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
+    for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  async function removeBg(base64) {
+    var res = await fetch(OCR_PROXY + '/removebg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Image: base64 })
+    });
+    if (!res.ok) { throw new Error('背景除去 ' + res.status + ': ' + (await res.text())); }
+    return (await res.json()).base64Image;
+  }
+
+  async function uploadImageToRecore(pngBase64) {
+    var r1 = await fetch(BASE_URL + '/upload/public', {
+      method: 'POST',
+      headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mime_type: 'image/png' })
+    });
+    if (!r1.ok) { throw new Error('署名URL取得 ' + r1.status + ': ' + (await r1.text())); }
+    var info = await r1.json();
+    var r2 = await fetch(info.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: b64ToBlob(pngBase64, 'image/png')
+    });
+    if (!r2.ok) { throw new Error('画像PUT ' + r2.status + ': ' + (await r2.text())); }
+    return info.url.split('?')[0];
+  }
+
+  // ===== カタログ新規登録 (POST /products) =====
+  async function registerCatalog(f, btn) {
+    if (btn) btn.disabled = true; // 二重送信ガード
+    showLoading('重複チェック中...');
+    try {
+      // 1) 重複ガード
+      if (f.mpn) {
+        var existing = await findByMpn(f.mpn);
+        if (existing.length) {
+          var e0 = existing[0];
+          addToSelection(e0.id, e0.title || f.title, e0.code || '(既存)', null, null);
+          showToast('既に存在したため選択に追加しました', 'success');
+          resetResultView();
+          return;
+        }
+      }
+      // 2) 画像（任意）
+      var imageUrls = [];
+      if (f.usePhoto && lastShotBase64) {
+        showLoading('背景除去中...');
+        var png = await removeBg(lastShotBase64);
+        showLoading('画像アップロード中...');
+        imageUrls.push(await uploadImageToRecore(png));
+      }
+      // 3) 登録
+      var attribute = {};
+      if (f.mpn) attribute.mpn = f.mpn;
+      if (f.rarity) attribute.custom_rarity = f.rarity;
+      if (f.expansion) attribute.custom_expansion_name = f.expansion;
+      var body = { title: f.title, attribute: attribute, category_id: f.categoryId };
+      if (imageUrls.length) body.image_urls = imageUrls;
+
+      showLoading('カタログ登録中...');
+      var res = await fetch(BASE_URL + '/products', {
+        method: 'POST',
+        headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { throw new Error('登録 ' + res.status + ': ' + (await res.text())); }
+      var created = await res.json();
+
+      // 4) 登録後に再検索で確認
+      var canonical = created, searchable = false;
+      if (f.mpn) {
+        showLoading('検索ヒット確認中...');
+        var found = await findByMpn(f.mpn);
+        var hit = found.filter(function(x) { return x.id === created.id; });
+        if (hit.length) { canonical = hit[0]; searchable = true; }
+      }
+      addToSelection(canonical.id, canonical.title || f.title, canonical.code || '(新規)', null, null);
+      resetResultView();
+      if (f.mpn && !searchable) {
+        showToast('登録OK。ただしpa_mpn検索に出ませんでした→カテゴリ属性設定を要確認', 'error');
+      } else {
+        showToast('マスタ登録＆リスト追加しました ✓', 'success');
+      }
+    } catch (e) {
+      showToast('登録失敗: ' + e.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+      hideLoading();
+    }
+  }
+
+  // ===== 選択リスト =====
   function updateList() {
     var count = selectedProducts.length;
     el('selected-count').textContent = count;
@@ -686,17 +730,26 @@
     }
   }
 
+  // ===== 完了ボタン =====
+  function onFinish() {
+    if (!selectedProducts.length) { showToast('リストが空です', 'error'); return; }
+    if (mode === 'catalog') {
+      showDone(selectedProducts.length + '件をマスタ登録しました', null);
+    } else {
+      showConfirm();
+    }
+  }
+
+  // ===== 確認（買取/店間移動） =====
   function showConfirm() {
     el('scan-panel').style.display = 'none';
     el('confirm-panel').style.display = 'block';
     el('mode-badge').textContent = '確認';
-    var isBig = (caseType === 'big');
-    document.querySelector('#confirm-panel .section-title').textContent =
-      (isBig ? '一般仕入れ' : '買取') + 'ケース作成確認';
-    el('btn-submit').textContent =
-      isBig ? '🚚 RECORE に一般仕入れケースを作成する' : '🛒 RECORE に買取ケースを作成する';
+    var isBig = (mode === 'big');
+    el('confirm-title').textContent = (isBig ? '一般仕入れ' : '買取') + 'ケース作成確認';
+    el('btn-submit').textContent = isBig ? '🚚 一般仕入れケースを作成する' : '🛒 買取ケースを作成する';
     el('confirm-list').innerHTML = selectedProducts.map(function(p, i) {
-      var priceLabel = (p.buy != null) ? '買取推奨 ' + yen(p.buy) : '価格未設定';
+      var priceLabel = (p.buy != null) ? (isBig ? '仕入単価 ' : '買取推奨 ') + yen(p.buy) : '価格未設定';
       return '<div class="confirm-item">' +
         '<div class="confirm-num">' + (i + 1) + '</div>' +
         '<div style="flex:1;min-width:0">' +
@@ -706,14 +759,14 @@
     }).join('');
   }
 
+  // ===== ケース作成（買取=bas_cases / 店間移動=big_cases） =====
   function createCase() {
     el('btn-submit').disabled = true;
-    var isBig = (caseType === 'big');
+    var isBig = (mode === 'big');
     showLoading((isBig ? '一般仕入れ' : '買取') + 'ケース作成中...');
     var endpoint = isBig ? '/big_cases' : '/v2/bas_cases';
     var goods = selectedProducts.map(function(p) {
       if (isBig) {
-        // 一般仕入れ: 単価=買取推奨価格(なければ0)。疑似店間移動の入値
         return { product_id: p.product_id, quantity: 1, unit_price: (p.buy != null ? p.buy : 0) };
       }
       return { product_id: p.product_id, quantity: 1 };
@@ -730,20 +783,11 @@
         goods: goods
       })
     }).then(function(res) {
-      if (!res.ok) {
-        return res.text().then(function(t) {
-          throw new Error('status ' + res.status + ': ' + t);
-        });
-      }
+      if (!res.ok) { return res.text().then(function(t) { throw new Error('status ' + res.status + ': ' + t); }); }
       return res.json();
     }).then(function(result) {
       hideLoading();
-      el('confirm-panel').style.display = 'none';
-      el('done-panel').style.display = 'block';
-      el('mode-badge').textContent = '完了';
-      document.querySelector('.done-title').textContent = (isBig ? '一般仕入れ' : '買取') + 'ケース作成完了';
-      el('done-code').textContent = result.code || '作成済み';
-      el('done-detail').textContent = selectedProducts.length + '件の商品が登録されました';
+      showDone(selectedProducts.length + '件の商品が登録されました', result.code || '作成済み');
     }).catch(function(e) {
       hideLoading();
       el('btn-submit').disabled = false;
@@ -751,32 +795,45 @@
     });
   }
 
-  function restart() {
-    selectedProducts = [];
-    el('done-panel').style.display = 'none';
-    el('scan-panel').style.display = 'block';
-    el('result-panel').style.display = 'none';
-    el('selected-list').style.display = 'none';
-    el('ocr-display').innerHTML = '';
-    el('suggest-container').innerHTML = '';
-    el('selected-count').textContent = '0';
-    el('btn-finish').disabled = true;
-    el('btn-submit').disabled = false;
-    el('mode-badge').textContent = 'スキャン中';
+  // ===== 完了画面 =====
+  function showDone(detail, code) {
+    el('scan-panel').style.display = 'none';
+    el('confirm-panel').style.display = 'none';
+    el('done-panel').style.display = 'block';
+    el('mode-badge').textContent = '完了';
+    el('done-title').textContent = (mode === 'catalog') ? 'マスタ登録完了' : modeLabel(mode) + 'ケース作成完了';
+    el('done-sub').textContent = (mode === 'catalog') ? 'RECOREの商品マスタに登録しました' : 'RECOREに以下のケースが作成されました';
+    if (code) { el('done-code').style.display = 'block'; el('done-code').textContent = code; }
+    else { el('done-code').style.display = 'none'; }
+    el('done-detail').textContent = detail;
   }
 
-  el('btn-start').addEventListener('click', startScan);
+  function restart() {
+    resetSession();
+    el('done-panel').style.display = 'none';
+    el('confirm-panel').style.display = 'none';
+    el('scan-panel').style.display = 'block';
+    el('mode-badge').textContent = modeLabel(mode);
+  }
+
+  // ===== イベント =====
+  el('btn-start').addEventListener('click', goModeSelect);
+  el('btn-modeback').addEventListener('click', backToMode);
+  var modeCards = document.querySelectorAll('.mode-card');
+  for (var i = 0; i < modeCards.length; i++) {
+    (function(card) {
+      card.addEventListener('click', function() { selectMode(card.getAttribute('data-mode')); });
+    })(modeCards[i]);
+  }
   el('btn-shoot').addEventListener('click', shoot);
   el('btn-manual').addEventListener('click', manualSearch);
-  el('manual-mpn').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') manualSearch();
-  });
-  el('btn-finish').addEventListener('click', showConfirm);
+  el('manual-mpn').addEventListener('keydown', function(e) { if (e.key === 'Enter') manualSearch(); });
+  el('btn-finish').addEventListener('click', onFinish);
   el('btn-submit').addEventListener('click', createCase);
   el('btn-back').addEventListener('click', function() {
     el('confirm-panel').style.display = 'none';
     el('scan-panel').style.display = 'block';
-    el('mode-badge').textContent = 'スキャン中';
+    el('mode-badge').textContent = modeLabel(mode);
   });
   el('btn-restart').addEventListener('click', restart);
 })();
