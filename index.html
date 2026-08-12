@@ -49,7 +49,7 @@
   #video { width: 100%; height: 100%; object-fit: cover; }
   .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
   .scan-frame { width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
-  .scan-frame.portrait { width: auto; height: 80%; aspect-ratio: 63/88; } /* トレカ実寸 63x88mm 縦 */
+  .scan-frame.portrait { width: auto; height: 66%; aspect-ratio: 63/88; } /* トレカ縦。周囲に背景を残しremove.bgが前景検出しやすく */
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .manual-input-row { display: flex; gap: 8px; }
@@ -408,23 +408,28 @@
     return canvas;
   }
 
+  // canvas → data URL（PNG無圧縮。ただし約5MB超はJPEGにフォールバック）
+  function canvasToUrl(c) {
+    var u = c.toDataURL('image/png');
+    if (u.length > 6500000) u = c.toDataURL('image/jpeg', 0.92);
+    return u;
+  }
+  function fullFrameCanvas() {
+    var v = el('video'), c = el('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext('2d').drawImage(v, 0, 0);
+    return c;
+  }
+
   // ===== 撮影 / 手入力 =====
   function shoot() {
     var video = el('video');
-    // カタログ=カードを切り落とさない程度に少し広め(最終のピッタリ切りはremove.bgのcropが担当)
-    // 買取・店間移動=型番位置が様々→切れ防止で広め
-    var canvas = captureCardCanvas(mode === 'catalog' ? 0.12 : 0.5);
-    if (!canvas) { // 動画未準備時はフルフレームでフォールバック
-      canvas = el('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-    }
-    // PNG無圧縮で送信（圧縮ノイズ無し）。ただしClaudeの画像上限(約5MB)を超える時は高品質JPEGへ
-    var dataUrl = canvas.toDataURL('image/png');
-    if (dataUrl.length > 6500000) { dataUrl = canvas.toDataURL('image/jpeg', 0.95); }
-    lastShotBase64 = dataUrl; // data URL のまま保持（Worker側でmedia_type判定）
-    var reqBody = { base64Image: dataUrl };
+    // OCR用: 型番/タイトルに画素を集中（カード大きめクロップ）
+    var ocrCanvas = captureCardCanvas(mode === 'catalog' ? 0.12 : 0.5) || fullFrameCanvas();
+    var ocrUrl = canvasToUrl(ocrCanvas);
+    // 背景除去用: remove.bgは被写体周囲に背景が必要 → フルフレームを渡す（最終トリムはremove.bg crop=true）
+    lastShotBase64 = (mode === 'catalog') ? canvasToUrl(fullFrameCanvas()) : ocrUrl;
+    var reqBody = { base64Image: ocrUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
     fetch(OCR_PROXY, {
