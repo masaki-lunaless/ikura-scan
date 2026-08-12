@@ -108,7 +108,7 @@
   .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text2); font-size: 14px; }
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; font-size: 13px; color: var(--text); z-index: 999; transition: transform 0.3s ease; white-space: nowrap; max-width: 90vw; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(120px); background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; font-size: 13px; color: var(--text); z-index: 999; transition: transform 0.3s ease; white-space: normal; line-height: 1.5; max-width: 90vw; text-align: center; }
   .toast.show { transform: translateX(-50%) translateY(0); }
   .toast.error { border-color: var(--danger); color: var(--danger); }
   .toast.success { border-color: var(--accent); color: var(--accent); }
@@ -262,7 +262,7 @@
     t.textContent = msg;
     t.className = 'toast' + (type ? ' ' + type : '') + ' show';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3000);
+    toastTimer = setTimeout(function() { t.classList.remove('show'); }, type === 'error' ? 6000 : 3000);
   }
   function yen(v) { return '¥' + Number(v).toLocaleString('ja-JP'); }
 
@@ -353,8 +353,8 @@
     navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width: { ideal: 2560 }, height: { ideal: 1440 },
-        advanced: [{ focusMode: 'continuous' }] // 未対応端末では無視される
+        width: { ideal: 2560 }, height: { ideal: 1440 }
+        // ※ focusMode:continuous はAFハンチング(画面の揺れ)を招くため指定しない
       }
     }).then(function(s) {
       stream = s;
@@ -766,7 +766,16 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Image: base64 })
     });
-    if (!res.ok) { throw new Error('背景除去 ' + res.status + ': ' + (await res.text())); }
+    if (!res.ok) {
+      var j = {}; try { j = await res.json(); } catch (e) {}
+      if (j.code === 'unknown_foreground')
+        throw new Error('背景除去できず：カード周囲に背景が写るよう、少し引いて内枠にカードを収めて撮ってください');
+      if (j.code === 'insufficient_credits')
+        throw new Error('remove.bgのクレジット不足です');
+      if (j.code === 'file_too_large' || res.status === 413)
+        throw new Error('画像が大きすぎます（少し引いて撮る/解像度を下げる）');
+      throw new Error('背景除去 ' + res.status + (j.title ? '：' + j.title : ''));
+    }
     return (await res.json()).base64Image;
   }
 

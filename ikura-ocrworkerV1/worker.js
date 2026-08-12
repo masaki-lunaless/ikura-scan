@@ -203,7 +203,15 @@ async function handleRemoveBg(request, env) {
 
   if (!res.ok) {
     const detail = await res.text();
-    return json({ error: "remove.bg error", status: res.status, detail }, 502);
+    let code = "", title = "";
+    try {
+      const e = (JSON.parse(detail).errors || [{}])[0];
+      code = e.code || "";
+      title = e.title || "";
+    } catch {
+      /* detailはそのまま返す */
+    }
+    return json({ error: "remove.bg error", code, title, status: res.status, detail }, 502);
   }
 
   const buf = await res.arrayBuffer();
