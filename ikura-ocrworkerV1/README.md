@@ -5,7 +5,7 @@
 Supabase Edge Functions で動いていた同等OCRプロキシの移行版。
 
 ## 仕様
-- モデル: `claude-sonnet-5` / `max_tokens: 64`
+- モデル: `claude-sonnet-4-6`（Telesatei査定Workerと統一）/ `max_tokens: 64`
 - 入力: `POST` body `{ "base64Image": "..." }`（data URL・生base64どちらも可）
 - 出力: `{ "codes": ["210/184"] }`（JSONのみ）
 - CORS: `Access-Control-Allow-Origin: *` ＋ OPTIONSプリフライト対応

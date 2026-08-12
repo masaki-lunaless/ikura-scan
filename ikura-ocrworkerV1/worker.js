@@ -8,7 +8,7 @@
 // ============================================================
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-5";
+const MODEL = "claude-sonnet-4-6"; // Telesatei査定Workerと揃える
 const MAX_TOKENS = 64;
 
 const PROMPT =
