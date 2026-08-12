@@ -347,7 +347,11 @@
   function startCamera() {
     if (stream) return;
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 2560 }, height: { ideal: 1440 },
+        advanced: [{ focusMode: 'continuous' }] // 未対応端末では無視される
+      }
     }).then(function(s) {
       stream = s;
       el('video').srcObject = s;
@@ -381,14 +385,40 @@
     el('btn-modeback').style.display = 'none';
   }
 
+  // ガイド枠(+マージン)にクロップして撮影 → 型番に画素を集中させOCR精度UP
+  // object-fit:cover の表示座標を動画の実ピクセルへ逆変換してクロップ
+  function captureCardCanvas(pad) {
+    var video = el('video');
+    var vW = video.videoWidth, vH = video.videoHeight;
+    var canvas = el('canvas');
+    if (!vW || !vH) return null;
+    var box = el('camera-box').getBoundingClientRect();
+    var frame = el('scan-frame').getBoundingClientRect();
+    var scale = Math.max(box.width / vW, box.height / vH); // cover
+    var visW = box.width / scale, visH = box.height / scale; // 動画上で見えている範囲
+    var offX = (vW - visW) / 2, offY = (vH - visH) / 2;
+    var fx = Math.min(1, (frame.width / box.width) * (1 + pad));
+    var fy = Math.min(1, (frame.height / box.height) * (1 + pad));
+    var cropW = fx * visW, cropH = fy * visH;
+    var cropX = offX + (visW - cropW) / 2;
+    var cropY = offY + (visH - cropH) / 2;
+    canvas.width = Math.round(cropW);
+    canvas.height = Math.round(cropH);
+    canvas.getContext('2d').drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
   // ===== 撮影 / 手入力 =====
   function shoot() {
     var video = el('video');
-    var canvas = el('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    var canvas = captureCardCanvas(0.2); // 枠+20%マージン
+    if (!canvas) { // 動画未準備時はフルフレームでフォールバック
+      canvas = el('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+    }
+    var base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
     lastShotBase64 = base64;
     var reqBody = { base64Image: base64 };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
