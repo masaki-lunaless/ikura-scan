@@ -181,10 +181,16 @@ async function handleRemoveBg(request, env) {
   }
 
   // data URL 接頭辞が付いていても生base64だけに
-  const { data } = parseImage(base64Image);
+  const { mediaType, data } = parseImage(base64Image);
+
+  // base64フィールド(image_file_b64)は上限が小さく大きい画像で failed_to_read_image になる。
+  // バイナリの image_file で送る（remove.bg推奨・上限が大きい）
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
   const form = new FormData();
-  form.append("image_file_b64", data);
+  form.append("image_file", new Blob([bytes], { type: mediaType || "image/jpeg" }), "image");
   form.append("size", "auto"); // プランに応じた最大解像度（無料枠はpreview相当）
   form.append("format", "png"); // 透過PNG
   form.append("crop", "true"); // 背景除去後、被写体(カード)の外接矩形にピッタリ切り抜き

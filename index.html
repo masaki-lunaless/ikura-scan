@@ -247,10 +247,11 @@
   var stream = null;
   var selectedProducts = [];     // bas/big=ケース対象 / catalog=登録済み一覧
   var toastTimer = null;
-  var lastShotBase64 = null;     // 直近の撮影画像(生base64/jpeg)。手入力時はnull
   var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
   var lastExtract = { title: '' };// カタログ登録: フルOCRの抽出結果
   var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
+  var lastCardImage = null;      // カタログ登録: 切り出し済みカード画像(data URL)
+  var scannerPromise = null;     // OpenCV.js + jscanify のロード
 
   function el(id) { return document.getElementById(id); }
   function getApiKey() { return el('api-key').value.trim(); }
@@ -347,6 +348,7 @@
     el('scan-frame').classList.toggle('portrait', portrait);
     el('card-guide').classList.toggle('show', portrait); // 内枠はカタログ登録のみ
     el('manual-row').style.display = portrait ? 'none' : 'flex';
+    if (portrait) { loadScanner().catch(function() {}); } // カード検出エンジンを先読み
     startCamera();
   }
 
@@ -376,7 +378,7 @@
     el('btn-finish').disabled = true;
     el('btn-submit').disabled = false;
     el('freeze').style.display = 'none';
-    lastShotBase64 = null;
+    lastCardImage = null;
     lastPrimaryCode = '';
     lastExtract = { title: '' };
   }
@@ -427,7 +429,41 @@
     c.getContext('2d').drawImage(v, 0, 0);
     return c;
   }
-  // canvasを長辺maxEdgeに縮小したJPEG data URL（remove.bgの読取上限対策）
+  // ===== カードスキャナー (OpenCV.js + jscanify) =====
+  function loadScannerScript(src) {
+    return new Promise(function(resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src; s.async = true;
+      s.onload = resolve;
+      s.onerror = function() { reject(new Error('load fail: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadScanner() {
+    if (scannerPromise) return scannerPromise;
+    scannerPromise = loadScannerScript('https://docs.opencv.org/4.7.0/opencv.js').then(function() {
+      return new Promise(function(resolve) {
+        (function waitCv() {
+          if (window.cv && window.cv.Mat) return resolve();
+          if (window.cv && typeof window.cv.then === 'function') { window.cv.then(function(m) { window.cv = m; resolve(); }); return; }
+          if (window.cv) { window.cv.onRuntimeInitialized = resolve; return; }
+          setTimeout(waitCv, 50);
+        })();
+      });
+    }).then(function() {
+      return loadScannerScript('https://cdn.jsdelivr.net/npm/jscanify@1.2.0/dist/jscanify.min.js');
+    }).then(function() {
+      return new jscanify();
+    });
+    return scannerPromise;
+  }
+  // カード四隅を検出→台形補正で長方形に切り出し（トレカ 63:88）
+  async function extractCardCanvas(sourceCanvas) {
+    var scanner = await loadScanner();
+    return scanner.extractPaper(sourceCanvas, 810, 1132); // 810*88/63≈1131
+  }
+
+  // canvasを長辺maxEdgeに縮小したJPEG data URL
   function toBoundedJpeg(srcCanvas, maxEdge, q) {
     var w = srcCanvas.width, h = srcCanvas.height;
     var scale = Math.min(1, maxEdge / Math.max(w, h));
@@ -440,20 +476,31 @@
   }
 
   // ===== 撮影 / 手入力 =====
-  function shoot() {
+  async function shoot() {
     el('freeze').style.display = 'none'; // 直前の凍結を解除してから撮影
     var ocrUrl;
     if (mode === 'catalog') {
       // OCR用: 内枠(カード)に画素を集中
       ocrUrl = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.12) || fullFrameCanvas());
-      // 背景除去用: 外枠(カード+背景リング)を縮小JPEGで（remove.bgの読取上限内に）
-      lastShotBase64 = toBoundedJpeg(captureFrameCanvas(el('scan-frame'), 0.03) || fullFrameCanvas(), 1400, 0.85);
+      // EC画像: 外枠(カード+背景リング)からカードを検出→台形補正で切り出し
+      var outer = captureFrameCanvas(el('scan-frame'), 0.05) || fullFrameCanvas();
+      showLoading('カード検出中...');
+      try {
+        var card = await extractCardCanvas(outer);
+        lastCardImage = card.toDataURL('image/jpeg', 0.92);
+      } catch (e) {
+        // 検出失敗 → 内枠クロップにフォールバック（登録は継続）
+        lastCardImage = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.02) || outer);
+        showToast('カード枠を自動検出できず、枠クロップで代用します', '');
+      }
+      hideLoading();
+      el('freeze').src = lastCardImage; // 切り出したカードをプレビュー
     } else {
       ocrUrl = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.5) || fullFrameCanvas());
-      lastShotBase64 = ocrUrl; // 買取/店間移動は背景除去なし
+      lastCardImage = null;
+      el('freeze').src = fullFrameCanvas().toDataURL('image/jpeg', 0.6);
     }
     // iPhone風: 撮れた写真を凍結表示（ライブ映像の揺れを隠す）
-    el('freeze').src = fullFrameCanvas().toDataURL('image/jpeg', 0.6);
     el('freeze').style.display = 'block';
     var reqBody = { base64Image: ocrUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
@@ -494,7 +541,7 @@
   function manualSearch() {
     var v = el('manual-mpn').value.trim();
     if (!v) { showToast('型番を入力してください', 'error'); return; }
-    lastShotBase64 = null; // 手入力は添付写真なし
+    lastCardImage = null; // 手入力は添付画像なし
     lastExtract = { title: '' };
     el('ocr-display').innerHTML = '手入力: <span class="extracted">' + v + '</span>';
     el('result-panel').style.display = 'block';
@@ -711,9 +758,9 @@
     wrap.className = 'no-result';
     wrap.innerHTML = '<div class="emoji">🗂</div>マスタ未登録 — 新規登録します';
 
-    var photoNote = (lastShotBase64)
-      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 撮影写真を背景除去して添付</label>'
-      : '<div class="reg-check">（手入力のため添付写真なし）</div>';
+    var photoNote = (lastCardImage)
+      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 切り出したカード画像を添付</label>'
+      : '<div class="reg-check">（手入力のため添付画像なし）</div>';
 
     var form = document.createElement('div');
     form.className = 'reg-form';
@@ -779,37 +826,22 @@
     return new Blob([arr], { type: mime });
   }
 
-  async function removeBg(base64) {
-    var res = await fetch(OCR_PROXY + '/removebg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Image: base64 })
-    });
-    if (!res.ok) {
-      var j = {}; try { j = await res.json(); } catch (e) {}
-      if (j.code === 'unknown_foreground')
-        throw new Error('背景除去できず：カード周囲に背景が写るよう、少し引いて内枠にカードを収めて撮ってください');
-      if (j.code === 'insufficient_credits')
-        throw new Error('remove.bgのクレジット不足です');
-      if (j.code === 'file_too_large' || res.status === 413)
-        throw new Error('画像が大きすぎます（少し引いて撮る/解像度を下げる）');
-      throw new Error('背景除去 ' + res.status + (j.title ? '：' + j.title : ''));
-    }
-    return (await res.json()).base64Image;
-  }
-
-  async function uploadImageToRecore(pngBase64) {
+  // data URL(またはbase64) をRECOREにアップロードして公開URLを返す
+  async function uploadImageToRecore(dataUrl) {
+    var m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/.exec(dataUrl);
+    var mime = m ? m[1] : 'image/jpeg';
+    var b64 = m ? m[2] : dataUrl;
     var r1 = await fetch(BASE_URL + '/upload/public', {
       method: 'POST',
       headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mime_type: 'image/png' })
+      body: JSON.stringify({ mime_type: mime })
     });
     if (!r1.ok) { throw new Error('署名URL取得 ' + r1.status + ': ' + (await r1.text())); }
     var info = await r1.json();
     var r2 = await fetch(info.url, {
       method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: b64ToBlob(pngBase64, 'image/png')
+      headers: { 'Content-Type': mime },
+      body: b64ToBlob(b64, mime)
     });
     if (!r2.ok) { throw new Error('画像PUT ' + r2.status + ': ' + (await r2.text())); }
     return info.url.split('?')[0];
@@ -831,13 +863,11 @@
           return;
         }
       }
-      // 2) 画像（任意）
+      // 2) 画像（任意）: 撮影時に切り出し済みのカード画像を直接アップロード
       var imageUrls = [];
-      if (f.usePhoto && lastShotBase64) {
-        showLoading('背景除去中...');
-        var png = await removeBg(lastShotBase64);
+      if (f.usePhoto && lastCardImage) {
         showLoading('画像アップロード中...');
-        imageUrls.push(await uploadImageToRecore(png));
+        imageUrls.push(await uploadImageToRecore(lastCardImage));
       }
       // 3) 登録
       var attribute = {};
