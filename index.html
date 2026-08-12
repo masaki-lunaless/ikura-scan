@@ -48,8 +48,11 @@
   .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
   .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-  .scan-frame { width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
-  .scan-frame.portrait { width: auto; height: 66%; aspect-ratio: 63/88; } /* トレカ縦。周囲に背景を残しremove.bgが前景検出しやすく */
+  .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
+  .scan-frame.portrait { width: auto; height: 82%; aspect-ratio: 63/88; } /* 外枠=撮影範囲(背景込み) */
+  .card-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); height: 56%; aspect-ratio: 63/88; border: 2px dashed rgba(255,255,255,0.75); border-radius: 6px; display: none; } /* 内枠=カードを合わせる位置 */
+  .card-guide.show { display: block; }
+  .card-guide::after { content: 'カードをここに'; position: absolute; top: -22px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(255,255,255,0.7); }
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .manual-input-row { display: flex; gap: 8px; }
@@ -168,7 +171,7 @@
   <div class="camera-section">
     <div class="camera-box" id="camera-box">
       <video id="video" autoplay playsinline muted></video>
-      <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div></div>
+      <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div><div class="card-guide" id="card-guide"></div></div>
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
@@ -340,6 +343,7 @@
     var portrait = (m === 'catalog');
     el('camera-box').classList.toggle('portrait', portrait);
     el('scan-frame').classList.toggle('portrait', portrait);
+    el('card-guide').classList.toggle('show', portrait); // 内枠はカタログ登録のみ
     el('manual-row').style.display = portrait ? 'none' : 'flex';
     startCamera();
   }
@@ -385,15 +389,15 @@
     el('btn-modeback').style.display = 'none';
   }
 
-  // ガイド枠(+マージン)にクロップして撮影 → 型番に画素を集中させOCR精度UP
+  // 指定フレーム(+マージン)にクロップして撮影
   // object-fit:cover の表示座標を動画の実ピクセルへ逆変換してクロップ
-  function captureCardCanvas(pad) {
+  function captureFrameCanvas(frameEl, pad) {
     var video = el('video');
     var vW = video.videoWidth, vH = video.videoHeight;
     var canvas = el('canvas');
     if (!vW || !vH) return null;
     var box = el('camera-box').getBoundingClientRect();
-    var frame = el('scan-frame').getBoundingClientRect();
+    var frame = frameEl.getBoundingClientRect();
     var scale = Math.max(box.width / vW, box.height / vH); // cover
     var visW = box.width / scale, visH = box.height / scale; // 動画上で見えている範囲
     var offX = (vW - visW) / 2, offY = (vH - visH) / 2;
@@ -423,12 +427,16 @@
 
   // ===== 撮影 / 手入力 =====
   function shoot() {
-    var video = el('video');
-    // OCR用: 型番/タイトルに画素を集中（カード大きめクロップ）
-    var ocrCanvas = captureCardCanvas(mode === 'catalog' ? 0.12 : 0.5) || fullFrameCanvas();
-    var ocrUrl = canvasToUrl(ocrCanvas);
-    // 背景除去用: remove.bgは被写体周囲に背景が必要 → フルフレームを渡す（最終トリムはremove.bg crop=true）
-    lastShotBase64 = (mode === 'catalog') ? canvasToUrl(fullFrameCanvas()) : ocrUrl;
+    var ocrUrl;
+    if (mode === 'catalog') {
+      // OCR用: 内枠(カード)に画素を集中
+      ocrUrl = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.12) || fullFrameCanvas());
+      // 背景除去用: 外枠(カード+背景リング)を渡す→remove.bgが前景検出、crop=trueで最終トリム
+      lastShotBase64 = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.03) || fullFrameCanvas());
+    } else {
+      ocrUrl = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.5) || fullFrameCanvas());
+      lastShotBase64 = ocrUrl; // 買取/店間移動は背景除去なし
+    }
     var reqBody = { base64Image: ocrUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
