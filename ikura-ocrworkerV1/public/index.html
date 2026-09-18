@@ -321,7 +321,7 @@
   var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
   var lastExtract = { title: '' };// カタログ登録: フルOCRの抽出結果
   var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
-  var lastCardImage = null;      // カタログ登録: 剛体回転＋内側クロップ済み画像(data URL)
+  var lastCardImage = null;      // カタログ登録: 剛体回転＋外周内クロップ済み画像(data URL)
   var scannerPromise = null;     // OpenCV.js のロード
   var isShooting = false;        // 映像タップと下部ボタンの二重発火を防ぐ
 
@@ -742,7 +742,7 @@
   var CARD_GUIDE_TO_FRAME = 56 / 82;
   // 検出外周の外側は取らず、さらに内側へ少量クロップして机の混入を防ぐ。
   var CARD_EDGE_SAFETY = 0;
-  var CARD_INNER_CROP = 0.004;
+  var CARD_EXTRA_INSET = 0;
 
   function applyCardPreset(title) {
     var size = CARD_PRESETS[title] || [63, 88];
@@ -893,7 +893,8 @@
     };
   }
 
-  function collectCardQuads(binary, imageWidth, imageHeight, candidates) {
+  function collectCardQuads(binary, imageWidth, imageHeight, candidates, sourceMethod) {
+    sourceMethod = sourceMethod || 'edge';
     var contours = new cv.MatVector();
     var hierarchy = new cv.Mat();
     cv.findContours(binary, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
@@ -919,7 +920,8 @@
           var corners = orderCorners(points);
           var metrics = scoreCardQuad(corners, imageWidth, imageHeight);
           if (metrics) {
-            candidates.push({ corners: corners, metrics: metrics, method: 'quad' });
+            if (sourceMethod === 'green-mask') metrics.score += 0.10;
+            candidates.push({ corners: corners, metrics: metrics, method: sourceMethod + '-quad' });
             foundQuad = true;
           }
         }
@@ -940,7 +942,8 @@
           if (fillRatio >= 0.62) {
             // 台形を保持できるquadを優先し、回転矩形はフォールバックに留める。
             rectMetrics.score -= 0.07;
-            candidates.push({ corners: rectCorners, metrics: rectMetrics, method: 'rotated-rect' });
+            if (sourceMethod === 'green-mask') rectMetrics.score += 0.10;
+            candidates.push({ corners: rectCorners, metrics: rectMetrics, method: sourceMethod + '-rotated-rect' });
           }
         }
       }
@@ -967,6 +970,38 @@
     cv.equalizeHist(gray, enhanced);
     var candidates = [];
     var kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+
+    // 無光沢の緑背景が十分に写っている場合だけ、色を外周検出の補助として使う。
+    // 背景の置換や透過処理はせず、得られた四隅以外の画素には触れない。
+    var rgb = new cv.Mat(), hsv = new cv.Mat(), greenMask = new cv.Mat();
+    cv.cvtColor(work, rgb, cv.COLOR_RGBA2RGB);
+    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+    var greenLow = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), new cv.Scalar(30, 45, 25, 0));
+    var greenHigh = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), new cv.Scalar(95, 255, 255, 255));
+    cv.inRange(hsv, greenLow, greenHigh, greenMask);
+    var greenCoverage = cv.countNonZero(greenMask) / (greenMask.rows * greenMask.cols);
+    var greenBorderHits = 0, greenBorderSamples = 0;
+    for (var sample = 0; sample < 24; sample++) {
+      var sampleX = Math.min(greenMask.cols - 1, Math.round((greenMask.cols - 1) * sample / 23));
+      var sampleY = Math.min(greenMask.rows - 1, Math.round((greenMask.rows - 1) * sample / 23));
+      [sampleX, (greenMask.rows - 1) * greenMask.cols + sampleX,
+        sampleY * greenMask.cols, sampleY * greenMask.cols + greenMask.cols - 1].forEach(function(offset) {
+        greenBorderSamples++;
+        if (greenMask.data[offset]) greenBorderHits++;
+      });
+    }
+    var greenBorderCoverage = greenBorderHits / greenBorderSamples;
+    greenLow.delete(); greenHigh.delete(); hsv.delete(); rgb.delete();
+    if (greenCoverage >= 0.12 && greenBorderCoverage >= 0.55) {
+      var foreground = new cv.Mat();
+      cv.bitwise_not(greenMask, foreground);
+      var greenKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(11, 11));
+      cv.morphologyEx(foreground, foreground, cv.MORPH_CLOSE, greenKernel);
+      collectCardQuads(foreground, work.cols, work.rows, candidates, 'green-mask');
+      greenKernel.delete(); foreground.delete();
+    }
+    greenMask.delete();
+
     [
       { image: gray, thresholds: [[12, 45], [25, 85], [35, 120], [70, 210]] },
       { image: enhanced, thresholds: [[18, 65], [35, 120], [70, 210]] }
@@ -975,7 +1010,7 @@
         var edges = new cv.Mat();
         cv.Canny(pass.image, edges, pair[0], pair[1]);
         cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
-        collectCardQuads(edges, work.cols, work.rows, candidates);
+        collectCardQuads(edges, work.cols, work.rows, candidates, 'edge');
         edges.delete();
       });
     });
@@ -990,7 +1025,7 @@
     var best = strictCandidates.length && strictCandidates[0].metrics.score >= 0.70
       ? strictCandidates[0] : candidates[0];
     if (!best || best.metrics.score < 0.58) return null;
-    var recovered = !best.metrics.strict || best.method === 'rotated-rect';
+    var recovered = !best.metrics.strict || best.method.indexOf('rotated-rect') >= 0;
 
     var c = best.corners;
     Object.keys(c).forEach(function(key) {
@@ -1000,6 +1035,7 @@
       corners: expandCardCorners(c, sourceCanvas.width, sourceCanvas.height),
       score: best.metrics.score,
       recovered: recovered,
+      greenAssisted: best.method.indexOf('green-mask') === 0,
       method: best.method
     };
   }
@@ -1028,7 +1064,7 @@
     return angle;
   }
 
-  // 絵柄の参照や射影変形はしない。外形テンプレートに対し、回転・内側クロップ・一様拡縮だけを行う。
+  // 絵柄の参照や射影変形はしない。外形テンプレートに対し、回転・外周内クロップ・一様拡縮だけを行う。
   function warpCardCanvas(sourceCanvas, corners) {
     var tl = corners.topLeftCorner, tr = corners.topRightCorner;
     var bl = corners.bottomLeftCorner, br = corners.bottomRightCorner;
@@ -1065,7 +1101,7 @@
     var right = Math.min(rtr.x, rbr.x);
     var top = Math.max(rtl.y, rtr.y);
     var bottom = Math.min(rbl.y, rbr.y);
-    var trim = Math.max(2, Math.min(right - left, bottom - top) * CARD_INNER_CROP);
+    var trim = Math.max(0, Math.min(right - left, bottom - top) * CARD_EXTRA_INSET);
     left += trim; right -= trim; top += trim; bottom -= trim;
     var availableWidth = Math.max(1, right - left);
     var availableHeight = Math.max(1, bottom - top);
@@ -1103,7 +1139,7 @@
     return cardCanvas;
   }
 
-  // カード四隅を一回で検出→剛体回転と内側クロップ。画素を引き伸ばす台形補正はしない。
+  // カード四隅を一回で検出→剛体回転と外周内クロップ。画素を引き伸ばす台形補正はしない。
   async function extractCardCanvas(sourceCanvas) {
     await loadScanner();
     var detection = detectCardCorners(sourceCanvas);
@@ -1112,6 +1148,7 @@
       canvas: makeWhiteCatalogCanvas(card),
       automatic: !!detection,
       recovered: detection ? detection.recovered : false,
+      greenAssisted: detection ? detection.greenAssisted : false,
       score: detection ? detection.score : 0
     };
   }
@@ -1132,13 +1169,15 @@
     if (mode === 'catalog') {
       // OCR用: 内枠(カード)に画素を集中
       ocrUrl = canvasToUrl(cropSourceCanvas(sourceFrame, el('card-guide'), 0.12) || sourceFrame);
-      // EC画像: 同じ高解像度静止画から外周を検出し、剛体回転＋内側クロップする。
+      // EC画像: 同じ高解像度静止画から外周を検出し、剛体回転＋外周内クロップする。
       var outer = cropSourceCanvas(sourceFrame, el('scan-frame'), 0.05) || sourceFrame;
       showLoading('カード検出中...');
       try {
         var extraction = await extractCardCanvas(outer);
         lastCardImage = extraction.canvas.toDataURL('image/jpeg', 0.98);
-        if (extraction.recovered) {
+        if (extraction.greenAssisted) {
+          showToast('緑背景を使ってカード外周を検出しました', 'success');
+        } else if (extraction.recovered) {
           showToast('外周と傾きを補正しました', '');
         } else if (!extraction.automatic) {
           showToast('輪郭が不鮮明なため、ガイド枠で切り出しました', '');

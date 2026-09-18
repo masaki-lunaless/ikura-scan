@@ -21,7 +21,7 @@ iPhone / browser
   ├─ UI and camera capture (single-page index.html)
   ├─ ImageCapture.takePhoto(): high-resolution still capture when supported
   ├─ Display P3 canvas pipeline (sRGB fallback)
-  ├─ OpenCV.js: one-pass edge detection, rigid rotation, inner crop
+  ├─ OpenCV.js: edge/green-background detection, rigid rotation, outer-edge crop
   ├─ catalog registration queue (up to 1000 items)
   └─ direct PUT to a RECORE-issued signed upload URL
             │ authenticated same-origin API
@@ -76,14 +76,15 @@ RECORE画像用の処理順:
 1. グレースケール化
 2. Gaussian blur
 3. 元画像とヒストグラム均等化画像を用意
-4. 複数Canny閾値でエッジ検出
-5. Morphological closeで途切れた外周を接続
-6. 面積の小さい内部柄を除外し、複数の輪郭簡略化率で凸四角形を抽出
-7. 比率、面積、中央位置、直角度、対辺の平行度、回転角、端の余裕を採点
-8. 四角形が閉じない場合は、輪郭を包む最小回転矩形を保険に使う
-9. 4辺の平均角度から画像全体を剛体回転
-10. 回転後の四角形の全辺より内側に収まる63:88または59:86の矩形をクロップ
-11. 一様拡縮だけで規格サイズへ出力し、JPEG quality 0.98で保持
+4. 画像外周の55%以上が緑なら、HSVマスクで緑背景とカードを分離して外周候補を追加
+5. 複数Canny閾値でエッジ検出
+6. Morphological closeで途切れた外周を接続
+7. 面積の小さい内部柄を除外し、複数の輪郭簡略化率で凸四角形を抽出
+8. 比率、面積、中央位置、直角度、対辺の平行度、回転角、端の余裕を採点
+9. 四角形が閉じない場合は、輪郭を包む最小回転矩形を保険に使う
+10. 4辺の平均角度から画像全体を剛体回転
+11. 回転後の四角形の全辺より内側に収まる63:88または59:86の矩形をクロップ（追加insetは0）
+12. 一様拡縮だけで規格サイズへ出力し、JPEG quality 0.98で保持
 
 外形のリファレンスはカード規格比率だけです。カード絵柄を参照した補完、生成、非一様な引き伸ばし、perspective warpは禁止です。斜視撮影を完全な長方形へ変形せず、カード内側を少しクロップすることで机の混入を避けます。外周の白余白も追加しません。
 
@@ -132,7 +133,7 @@ OCRはCloudflare WorkerからAnthropic Messages APIへ送ります。
 
 現在のプロンプトと後処理は`123/456`形式の数字型番中心です。`OP12-007`のような英字混じり型番への対応は未実装です。関連Issue: [#6](https://github.com/masaki-lunaless/ikura-scan/issues/6)
 
-OCR用画像とRECORE保存画像は別です。ClaudeにはOCR向けクロップを送り、RECOREにはOpenCVで検出して剛体回転・内側クロップした画像を送ります。
+OCR用画像とRECORE保存画像は別です。ClaudeにはOCR向けクロップを送り、RECOREにはOpenCVで検出して剛体回転・外周内クロップした画像を送ります。緑背景は四隅検出だけに使い、色の置換・透過・合成は行いません。
 
 ## 認証と秘密情報
 
