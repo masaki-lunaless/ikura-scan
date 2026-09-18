@@ -17,6 +17,8 @@
   .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
   .logo span { color: var(--text2); font-weight: 400; font-size: 13px; margin-left: 6px; }
   .badge { background: var(--accent2); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-logout, .btn-settings { display: none; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 5px 9px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-modeback { background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; white-space: nowrap; }
   #setup-panel { padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
@@ -34,6 +36,7 @@
   .btn-primary { width: 100%; background: var(--accent); color: #000; font-weight: 700; font-size: 15px; border: none; border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-primary:active { opacity: 0.85; }
   #mode-panel { display: none; padding: 8px 20px 40px; }
+  #connection-panel { display: none; padding: 8px 20px 40px; }
   .mode-card { width: 100%; text-align: left; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 16px; margin-bottom: 12px; cursor: pointer; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 17px; font-weight: 700; display: flex; flex-direction: column; gap: 4px; }
   .mode-card:active { border-color: var(--accent); }
   .mode-card small { font-size: 12px; font-weight: 400; color: var(--text2); }
@@ -117,6 +120,7 @@
   .no-result .emoji { font-size: 36px; margin-bottom: 10px; }
   .no-result-actions { display: flex; gap: 10px; padding: 10px 0 4px; }
   .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--warn); }
+  .login-help { color: var(--text2); font-size: 12px; line-height: 1.7; }
   .btn-reg-toggle { width: 100%; background: transparent; border: 1.5px dashed var(--warn); color: var(--warn); font-weight: 700; font-size: 13px; padding: 11px; border-radius: 10px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; margin-top: 8px; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(10,10,15,0.9); display: none; align-items: center; justify-content: center; z-index: 500; padding: 20px; }
   .modal-overlay.show { display: flex; }
@@ -135,24 +139,60 @@
 <header>
   <button class="btn-modeback" id="btn-modeback" style="display:none">← モード選択</button>
   <div class="logo">いーくら <span>スキャン</span></div>
-  <div class="badge" id="mode-badge">設定</div>
+  <div class="header-actions">
+    <div class="badge" id="mode-badge">ログイン</div>
+    <button class="btn-settings" id="btn-settings">接続設定</button>
+    <button class="btn-logout" id="btn-logout">ログアウト</button>
+  </div>
 </header>
 
-<!-- STEP1: APIキー -->
+<!-- STEP1: スタッフログイン -->
 <div id="setup-panel">
-  <div class="notice">⚠️ テスト用プロトタイプ</div>
+  <div class="notice">🔐 RECOREのAPIキーは端末に保存されません</div>
   <div>
-    <div class="field-label">RECORE APIキー</div>
-    <input type="password" id="api-key" placeholder="rc_..." autocomplete="off">
+    <div class="field-label">会社コード</div>
+    <input type="text" id="company-code" placeholder="例: IKURA" autocomplete="organization">
   </div>
   <div>
-    <div class="field-label">店舗ID</div>
-    <input type="text" id="store-id" placeholder="1" value="1">
+    <div class="field-label">スタッフコード</div>
+    <input type="text" id="staff-code" placeholder="例: S001" autocomplete="username">
   </div>
-  <button class="btn-primary" id="btn-start">モード選択へ →</button>
+  <div>
+    <div class="field-label">PIN（4〜8桁）</div>
+    <input type="password" id="staff-pin" placeholder="••••" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password">
+  </div>
+  <div class="login-help">会社から案内されたコードと、ご自身のPINを入力してください。</div>
+  <button class="btn-primary" id="btn-start">ログイン →</button>
 </div>
 
-<!-- STEP2: モード選択 -->
+<!-- STEP2: 外部サービス接続設定（初回ログイン後／管理者のみ） -->
+<div id="connection-panel">
+  <div class="section-title" style="padding-top:24px">接続設定</div>
+  <div class="notice" id="connection-notice">初回設定を完了するとスキャンを開始できます。</div>
+  <div style="margin-top:14px">
+    <div class="field-label">コネクト先</div>
+    <select id="connection-provider" disabled>
+      <option value="recore">RECORE</option>
+    </select>
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">店舗名</div>
+    <input type="text" id="connection-store-name" placeholder="例: 本店" autocomplete="organization-title">
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">RECORE 店舗ID</div>
+    <input type="text" id="connection-store-id" placeholder="例: 1" autocomplete="off">
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">RECORE APIキー</div>
+    <input type="password" id="connection-api-key" placeholder="保存済みの場合は空欄のまま" autocomplete="off">
+    <div class="login-help" style="margin-top:6px">キーは保存後に画面から消え、Cloudflare側で暗号化されます。変更するときだけ新しいキーを入力してください。</div>
+  </div>
+  <button class="btn-primary" id="connection-save" style="margin-top:18px">接続設定を保存</button>
+  <button class="btn-back" id="connection-cancel">← モード選択へ戻る</button>
+</div>
+
+<!-- STEP3: モード選択 -->
 <div id="mode-panel">
   <div class="section-title" style="padding-top:24px">モードを選択</div>
   <button class="mode-card" data-mode="bas">🛒 買取モード
@@ -163,7 +203,7 @@
     <small>背景除去＋カテゴリ指定で商品マスタに登録</small></button>
 </div>
 
-<!-- STEP3: スキャン -->
+<!-- STEP4: スキャン -->
 <div id="scan-panel">
   <div class="counter-bar">
     <div class="counter-info"><span id="counter-label">選択済み</span> <strong id="selected-count">0</strong> 件</div>
@@ -239,9 +279,11 @@
 
 <script>
 (function() {
-  var BASE_URL = 'https://co-api.recore-pos.com';
-  var OCR_PROXY = 'https://ikura-ocr-proxy.lunaless.workers.dev';
-  var storeId = 1;
+  var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? 'http://localhost:8787'
+    : 'https://ikura-ocr-proxy.lunaless.workers.dev';
+  var currentUser = null;
+  var connectionApiKeySaved = false;
   var mode = 'bas';              // 'bas'=買取 / 'big'=店間移動 / 'catalog'=カタログ登録
   var defaultCategoryId = null;  // カタログ登録: 直近入力を記憶してプリフィル
   var stream = null;
@@ -254,7 +296,6 @@
   var scannerPromise = null;     // OpenCV.js + jscanify のロード
 
   function el(id) { return document.getElementById(id); }
-  function getApiKey() { return el('api-key').value.trim(); }
   function isCase() { return mode === 'bas' || mode === 'big'; }
   function modeLabel(m) { return m === 'bas' ? '買取' : m === 'big' ? '店間移動' : 'カタログ登録'; }
 
@@ -269,14 +310,185 @@
   }
   function yen(v) { return '¥' + Number(v).toLocaleString('ja-JP'); }
 
-  // ===== STEP1 → STEP2 =====
-  function goModeSelect() {
-    if (!getApiKey()) { showToast('APIキーを入力してください', 'error'); return; }
-    storeId = parseInt(el('store-id').value.trim()) || 1;
-    el('setup-panel').style.display = 'none';
-    el('mode-panel').style.display = 'block';
-    el('mode-badge').textContent = 'モード選択';
+  function apiFetch(path, options) {
+    options = options || {};
+    options.credentials = 'include';
+    return fetch(API_BASE + path, options).then(function(res) {
+      if (res.status === 401 && path.indexOf('/auth/') !== 0) {
+        showLogin();
+        showToast('セッションの有効期限が切れました。再ログインしてください', 'error');
+      }
+      return res;
+    });
+  }
+
+  function stopCamera() {
+    if (!stream) return;
+    stream.getTracks().forEach(function(track) { track.stop(); });
+    stream = null;
+    el('video').srcObject = null;
+  }
+
+  function hideAppPanels() {
+    ['connection-panel', 'mode-panel', 'scan-panel', 'confirm-panel', 'done-panel'].forEach(function(id) {
+      el(id).style.display = 'none';
+    });
+    el('cat-modal').classList.remove('show');
     el('btn-modeback').style.display = 'none';
+  }
+
+  function showLogin() {
+    currentUser = null;
+    connectionApiKeySaved = false;
+    stopCamera();
+    hideAppPanels();
+    el('setup-panel').style.display = 'flex';
+    el('btn-settings').style.display = 'none';
+    el('btn-logout').style.display = 'none';
+    el('mode-badge').textContent = 'ログイン';
+  }
+
+  function showModeSelect(user) {
+    currentUser = user;
+    el('setup-panel').style.display = 'none';
+    hideAppPanels();
+    el('mode-panel').style.display = 'block';
+    el('btn-logout').style.display = 'inline-block';
+    el('btn-settings').style.display = (user && user.role === 'admin') ? 'inline-block' : 'none';
+    el('mode-badge').textContent = (user && user.name) ? user.name : 'モード選択';
+  }
+
+  function handleAuthenticatedUser(user) {
+    currentUser = user;
+    if (user && user.needsSetup) {
+      openConnectionSettings(true);
+    } else {
+      showModeSelect(user);
+    }
+  }
+
+  async function openConnectionSettings(firstSetup) {
+    stopCamera();
+    el('setup-panel').style.display = 'none';
+    hideAppPanels();
+    el('connection-panel').style.display = 'block';
+    el('btn-logout').style.display = 'inline-block';
+    el('btn-settings').style.display = 'none';
+    el('mode-badge').textContent = '接続設定';
+    el('connection-api-key').value = '';
+    el('connection-cancel').style.display = firstSetup ? 'none' : '';
+
+    var isAdmin = currentUser && currentUser.role === 'admin';
+    ['connection-store-name', 'connection-store-id', 'connection-api-key'].forEach(function(id) {
+      el(id).disabled = !isAdmin;
+    });
+    el('connection-save').style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) {
+      el('connection-notice').textContent = '管理者がRECORE接続を設定するまでお待ちください。';
+      return;
+    }
+
+    el('connection-notice').textContent = firstSetup
+      ? '初回設定を完了するとスキャンを開始できます。'
+      : '保存済みAPIキーは表示しません。変更するときだけ新しいキーを入力してください。';
+    showLoading('接続設定を確認中...');
+    try {
+      var res = await apiFetch('/admin/connection');
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || '接続設定を取得できませんでした');
+      connectionApiKeySaved = !!data.apiKeySaved;
+      el('connection-store-name').value = data.storeName || '';
+      el('connection-store-id').value = data.storeId || '';
+      el('connection-api-key').placeholder = data.apiKeySaved
+        ? '保存済み（変更時のみ入力）'
+        : 'RECORE APIキーを入力';
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      hideLoading();
+    }
+  }
+
+  async function saveConnection() {
+    var storeName = el('connection-store-name').value.trim();
+    var storeId = el('connection-store-id').value.trim();
+    var apiKey = el('connection-api-key').value.trim();
+    if (!storeName || !storeId || (!connectionApiKeySaved && !apiKey)) {
+      showToast('店舗名、店舗ID' + (!connectionApiKeySaved ? '、APIキー' : '') + 'を入力してください', 'error');
+      return;
+    }
+    el('connection-save').disabled = true;
+    showLoading('接続設定を暗号化して保存中...');
+    try {
+      var res = await apiFetch('/admin/connection', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'recore', storeName: storeName, storeId: storeId, apiKey: apiKey })
+      });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || '接続設定を保存できませんでした');
+      el('connection-api-key').value = '';
+      connectionApiKeySaved = true;
+      currentUser = data.user;
+      showModeSelect(data.user);
+      showToast('RECORE接続を保存しました', 'success');
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      hideLoading();
+      el('connection-save').disabled = false;
+    }
+  }
+
+  // ===== STEP1: スタッフログイン =====
+  async function goModeSelect() {
+    var companyCode = el('company-code').value.trim();
+    var staffCode = el('staff-code').value.trim();
+    var pin = el('staff-pin').value.trim();
+    if (!companyCode || !staffCode || !/^\d{4,8}$/.test(pin)) {
+      showToast('会社コード、スタッフコード、4〜8桁のPINを入力してください', 'error');
+      return;
+    }
+    el('btn-start').disabled = true;
+    showLoading('ログイン中...');
+    try {
+      var res = await apiFetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyCode: companyCode, staffCode: staffCode, pin: pin })
+      });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || 'ログインできませんでした');
+      el('staff-pin').value = '';
+      handleAuthenticatedUser(data.user);
+      showToast((data.user.name || staffCode) + 'さん、ログインしました', 'success');
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      hideLoading();
+      el('btn-start').disabled = false;
+    }
+  }
+
+  async function restoreSession() {
+    showLoading('セッション確認中...');
+    try {
+      var res = await apiFetch('/auth/session');
+      if (!res.ok) { showLogin(); return; }
+      var data = await res.json();
+      handleAuthenticatedUser(data.user);
+    } catch (e) {
+      showLogin();
+    } finally {
+      hideLoading();
+    }
+  }
+
+  async function logout() {
+    try { await apiFetch('/auth/logout', { method: 'POST' }); } catch (e) { /* local logout continues */ }
+    resetSession();
+    showLogin();
+    showToast('ログアウトしました', '');
   }
 
   // ===== STEP2 → STEP3 =====
@@ -303,9 +515,7 @@
     el('cat-start').style.display = 'none';
     verifiedCategoryId = null;
     try {
-      var res = await fetch(BASE_URL + '/products/categories?ids=' + id + '&limit=1', {
-        headers: { 'Authorization': getApiKey() }
-      });
+      var res = await apiFetch('/recore/products/categories?ids=' + id + '&limit=1');
       if (!res.ok) { throw new Error('status ' + res.status); }
       var arr = await res.json();
       var cat = Array.isArray(arr) ? arr.filter(function(c) { return c.id === id; })[0] : null;
@@ -505,7 +715,7 @@
     var reqBody = { base64Image: ocrUrl };
     if (mode === 'catalog') reqBody.mode = 'full'; // タイトルも抽出
     showLoading('OCR解析中...');
-    fetch(OCR_PROXY, {
+    apiFetch('/ocr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody)
@@ -563,9 +773,8 @@
     var allProducts = [];
     var seen = {};
     var promises = codes.map(function(c) {
-      return fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(c) + '&limit=10', {
-        headers: { 'Authorization': getApiKey() }
-      }).then(function(res) { return res.ok ? res.json() : []; })
+      return apiFetch('/recore/products?pa_mpn=' + encodeURIComponent(c) + '&limit=10')
+        .then(function(res) { return res.ok ? res.json() : []; })
         .then(function(r) { if (Array.isArray(r)) allProducts = allProducts.concat(r); })
         .catch(function() {});
     });
@@ -589,9 +798,8 @@
 
   function fetchPriceRules(products) {
     var ids = products.map(function(p) { return p.id; }).join(',');
-    return fetch(BASE_URL + '/setting/price_product_company_rules?product_ids=' + ids + '&limit=250', {
-      headers: { 'Authorization': getApiKey() }
-    }).then(function(res) { return res.ok ? res.json() : []; }).then(function(rules) {
+    return apiFetch('/recore/setting/price_product_company_rules?product_ids=' + ids + '&limit=250')
+      .then(function(res) { return res.ok ? res.json() : []; }).then(function(rules) {
       var map = {};
       if (Array.isArray(rules)) {
         rules.forEach(function(rule) {
@@ -811,9 +1019,7 @@
   // pa_mpn で既存検索（重複ガード / 登録後確認に共用）
   async function findByMpn(code) {
     if (!code) return [];
-    var res = await fetch(BASE_URL + '/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10', {
-      headers: { 'Authorization': getApiKey() }
-    });
+    var res = await apiFetch('/recore/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10');
     if (!res.ok) return [];
     var r = await res.json();
     return Array.isArray(r) ? r : [];
@@ -831,9 +1037,9 @@
     var m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/.exec(dataUrl);
     var mime = m ? m[1] : 'image/jpeg';
     var b64 = m ? m[2] : dataUrl;
-    var r1 = await fetch(BASE_URL + '/upload/public', {
+    var r1 = await apiFetch('/recore/upload/public', {
       method: 'POST',
-      headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mime_type: mime })
     });
     if (!r1.ok) { throw new Error('署名URL取得 ' + r1.status + ': ' + (await r1.text())); }
@@ -878,9 +1084,9 @@
       if (imageUrls.length) body.image_urls = imageUrls;
 
       showLoading('カタログ登録中...');
-      var res = await fetch(BASE_URL + '/products', {
+      var res = await apiFetch('/recore/products', {
         method: 'POST',
-        headers: { 'Authorization': getApiKey(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
       if (!res.ok) { throw new Error('登録 ' + res.status + ': ' + (await res.text())); }
@@ -976,12 +1182,10 @@
       }
       return { product_id: p.product_id, quantity: 1 };
     });
-    fetch(BASE_URL + endpoint, {
+    apiFetch('/recore' + endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': getApiKey(),
-        'Content-Type': 'application/json',
-        'X-Store-Id': String(storeId)
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         note: 'いーくらスキャン(' + (isBig ? '一般仕入れ' : '買取') + ') - ' + new Date().toLocaleString('ja-JP'),
@@ -1023,6 +1227,13 @@
 
   // ===== イベント =====
   el('btn-start').addEventListener('click', goModeSelect);
+  el('btn-logout').addEventListener('click', logout);
+  el('btn-settings').addEventListener('click', function() { openConnectionSettings(false); });
+  el('connection-save').addEventListener('click', saveConnection);
+  el('connection-cancel').addEventListener('click', function() { showModeSelect(currentUser); });
+  ['company-code', 'staff-code', 'staff-pin'].forEach(function(id) {
+    el(id).addEventListener('keydown', function(e) { if (e.key === 'Enter') goModeSelect(); });
+  });
   el('btn-modeback').addEventListener('click', backToMode);
   el('cat-verify').addEventListener('click', verifyCategory);
   el('cat-id-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') verifyCategory(); });
@@ -1045,6 +1256,7 @@
     el('mode-badge').textContent = modeLabel(mode);
   });
   el('btn-restart').addEventListener('click', restart);
+  restoreSession();
 })();
 </script>
 </body>
