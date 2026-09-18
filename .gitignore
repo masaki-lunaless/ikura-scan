@@ -1,0 +1,4 @@
+.dev.vars
+.wrangler/
+cookies.txt
+*.cpuprofile
