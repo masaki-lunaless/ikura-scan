@@ -2,5 +2,18 @@ name = "ikura-ocr-proxy"
 main = "worker.js"
 compatibility_date = "2026-07-01"
 
-# APIキーはコードに書かず、wrangler secret で登録する:
+# フロントエンドの正確なOrigin。複数はカンマ区切り。
+[vars]
+ALLOWED_ORIGINS = "https://REPLACE_WITH_FRONTEND_ORIGIN"
+
+# `wrangler d1 create ikura-auth` の結果でコメントを外してdatabase_idを埋める。
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ikura-auth"
+# database_id = "REPLACE_WITH_D1_DATABASE_ID"
+# migrations_dir = "migrations"
+
+# APIキー類はコードに書かず、wrangler secret で登録する:
 #   npx wrangler secret put CLAUDE_API_KEY
+#   npx wrangler secret put API_KEY_ENCRYPTION_KEY
+#   npx wrangler secret put BOOTSTRAP_SECRET
