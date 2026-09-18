@@ -357,7 +357,8 @@
     navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width: { ideal: 2560 }, height: { ideal: 1440 }
+        // 対応端末では4Kの動画フレームを要求する。未対応端末は自動で下位解像度へ落ちる。
+        width: { ideal: 3840 }, height: { ideal: 2160 }
         // ※ focusMode:continuous はAFハンチング(画面の揺れ)を招くため指定しない
       }
     }).then(function(s) {
@@ -434,9 +435,12 @@
   // 誤検出しても成功扱いになる。カード比率・面積・中央位置・直角度を採点し、
   // 信頼度が低い場合はユーザーが合わせたガイド枠を使う。
   var CARD_RATIO = 63 / 88;
-  var CARD_WIDTH = 810;
-  var CARD_HEIGHT = 1132;
+  // RECORE側で再縮小されても文字と細線が残るよう、従来の約1.55倍で生成する。
+  var CARD_WIDTH = 1260;
+  var CARD_HEIGHT = 1760;
   var CARD_GUIDE_TO_FRAME = 56 / 82;
+  // 検出輪郭ぴったりで切ると外枠のアンチエイリアスまで欠けるため、各辺を1.5%広げる。
+  var CARD_EDGE_SAFETY = 0.015;
 
   function loadScannerScript(src) {
     return new Promise(function(resolve, reject) {
@@ -560,7 +564,8 @@
 
   function detectCardCorners(sourceCanvas) {
     var source = cv.imread(sourceCanvas);
-    var maxEdge = 1100;
+    // 輪郭検出用の縮小を抑え、細い外枠を内側の絵柄と取り違えにくくする。
+    var maxEdge = 1600;
     var scale = Math.min(1, maxEdge / Math.max(source.cols, source.rows));
     var work = new cv.Mat();
     cv.resize(source, work, new cv.Size(Math.round(source.cols * scale), Math.round(source.rows * scale)), 0, 0, cv.INTER_AREA);
@@ -593,7 +598,25 @@
     Object.keys(c).forEach(function(key) {
       c[key] = { x: c[key].x / scale, y: c[key].y / scale };
     });
-    return { corners: c, score: best.metrics.score };
+    return { corners: expandCardCorners(c, sourceCanvas.width, sourceCanvas.height), score: best.metrics.score };
+  }
+
+  function expandCardCorners(corners, sourceWidth, sourceHeight) {
+    var keys = ['topLeftCorner', 'topRightCorner', 'bottomLeftCorner', 'bottomRightCorner'];
+    var center = keys.reduce(function(acc, key) {
+      acc.x += corners[key].x / keys.length;
+      acc.y += corners[key].y / keys.length;
+      return acc;
+    }, { x: 0, y: 0 });
+    var scale = 1 + CARD_EDGE_SAFETY * 2;
+    var expanded = {};
+    keys.forEach(function(key) {
+      expanded[key] = {
+        x: Math.max(0, Math.min(sourceWidth - 1, center.x + (corners[key].x - center.x) * scale)),
+        y: Math.max(0, Math.min(sourceHeight - 1, center.y + (corners[key].y - center.y) * scale))
+      };
+    });
+    return expanded;
   }
 
   function warpCardCanvas(sourceCanvas, corners) {
@@ -623,18 +646,23 @@
     var sy = Math.max(0, Math.round((sourceCanvas.height - cropHeight) / 2));
     var canvas = document.createElement('canvas');
     canvas.width = CARD_WIDTH; canvas.height = CARD_HEIGHT;
-    canvas.getContext('2d').drawImage(sourceCanvas, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+    var ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sourceCanvas, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
     return canvas;
   }
 
   // RECOREの一覧で見やすいよう、角を白くマスクして5%の白余白を付ける。
   function makeWhiteCatalogCanvas(cardCanvas) {
     var canvas = document.createElement('canvas');
-    canvas.width = 900; canvas.height = 1260;
+    canvas.width = 1400; canvas.height = 1960;
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    var x = 45, y = 64, w = 810, h = 1132, radius = 22;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    var x = 70, y = 100, w = CARD_WIDTH, h = CARD_HEIGHT, radius = 34;
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -669,13 +697,13 @@
       showLoading('カード検出中...');
       try {
         var extraction = await extractCardCanvas(outer);
-        lastCardImage = extraction.canvas.toDataURL('image/jpeg', 0.94);
+        lastCardImage = extraction.canvas.toDataURL('image/jpeg', 0.98);
         if (!extraction.automatic) {
           showToast('輪郭が不鮮明なため、ガイド枠で切り出しました', '');
         }
       } catch (e) {
         // OpenCV自体が失敗しても、ガイド枠から白背景画像を作って登録は継続する。
-        lastCardImage = makeWhiteCatalogCanvas(guideCropCanvas(outer)).toDataURL('image/jpeg', 0.94);
+        lastCardImage = makeWhiteCatalogCanvas(guideCropCanvas(outer)).toDataURL('image/jpeg', 0.98);
         showToast('自動補正を使えなかったため、ガイド枠で切り出しました', '');
       }
       hideLoading();
