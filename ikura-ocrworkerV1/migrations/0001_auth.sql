@@ -4,17 +4,27 @@ CREATE TABLE tenants (
   id TEXT PRIMARY KEY,
   code TEXT NOT NULL UNIQUE COLLATE NOCASE,
   name TEXT NOT NULL,
-  recore_api_key_ciphertext TEXT NOT NULL,
-  recore_api_key_iv TEXT NOT NULL,
   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
   created_at INTEGER NOT NULL
+);
+
+CREATE TABLE connections (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('recore')),
+  credentials_ciphertext TEXT NOT NULL,
+  credentials_iv TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE (tenant_id, provider)
 );
 
 CREATE TABLE stores (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  recore_store_id TEXT NOT NULL,
+  recore_store_id TEXT,
   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
   created_at INTEGER NOT NULL,
   UNIQUE (tenant_id, recore_store_id)

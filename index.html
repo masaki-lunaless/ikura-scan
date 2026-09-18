@@ -18,7 +18,7 @@
   .logo span { color: var(--text2); font-weight: 400; font-size: 13px; margin-left: 6px; }
   .badge { background: var(--accent2); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
-  .btn-logout { display: none; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 5px 9px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
+  .btn-logout, .btn-settings { display: none; background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 5px 9px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-modeback { background: transparent; border: 1px solid var(--border); color: var(--text2); font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; white-space: nowrap; }
   #setup-panel { padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
   .field-label { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
@@ -36,6 +36,7 @@
   .btn-primary { width: 100%; background: var(--accent); color: #000; font-weight: 700; font-size: 15px; border: none; border-radius: 12px; padding: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-primary:active { opacity: 0.85; }
   #mode-panel { display: none; padding: 8px 20px 40px; }
+  #connection-panel { display: none; padding: 8px 20px 40px; }
   .mode-card { width: 100%; text-align: left; background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 16px; margin-bottom: 12px; cursor: pointer; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 17px; font-weight: 700; display: flex; flex-direction: column; gap: 4px; }
   .mode-card:active { border-color: var(--accent); }
   .mode-card small { font-size: 12px; font-weight: 400; color: var(--text2); }
@@ -140,6 +141,7 @@
   <div class="logo">いーくら <span>スキャン</span></div>
   <div class="header-actions">
     <div class="badge" id="mode-badge">ログイン</div>
+    <button class="btn-settings" id="btn-settings">接続設定</button>
     <button class="btn-logout" id="btn-logout">ログアウト</button>
   </div>
 </header>
@@ -163,7 +165,34 @@
   <button class="btn-primary" id="btn-start">ログイン →</button>
 </div>
 
-<!-- STEP2: モード選択 -->
+<!-- STEP2: 外部サービス接続設定（初回ログイン後／管理者のみ） -->
+<div id="connection-panel">
+  <div class="section-title" style="padding-top:24px">接続設定</div>
+  <div class="notice" id="connection-notice">初回設定を完了するとスキャンを開始できます。</div>
+  <div style="margin-top:14px">
+    <div class="field-label">コネクト先</div>
+    <select id="connection-provider" disabled>
+      <option value="recore">RECORE</option>
+    </select>
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">店舗名</div>
+    <input type="text" id="connection-store-name" placeholder="例: 本店" autocomplete="organization-title">
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">RECORE 店舗ID</div>
+    <input type="text" id="connection-store-id" placeholder="例: 1" autocomplete="off">
+  </div>
+  <div style="margin-top:14px">
+    <div class="field-label">RECORE APIキー</div>
+    <input type="password" id="connection-api-key" placeholder="保存済みの場合は空欄のまま" autocomplete="off">
+    <div class="login-help" style="margin-top:6px">キーは保存後に画面から消え、Cloudflare側で暗号化されます。変更するときだけ新しいキーを入力してください。</div>
+  </div>
+  <button class="btn-primary" id="connection-save" style="margin-top:18px">接続設定を保存</button>
+  <button class="btn-back" id="connection-cancel">← モード選択へ戻る</button>
+</div>
+
+<!-- STEP3: モード選択 -->
 <div id="mode-panel">
   <div class="section-title" style="padding-top:24px">モードを選択</div>
   <button class="mode-card" data-mode="bas">🛒 買取モード
@@ -174,7 +203,7 @@
     <small>背景除去＋カテゴリ指定で商品マスタに登録</small></button>
 </div>
 
-<!-- STEP3: スキャン -->
+<!-- STEP4: スキャン -->
 <div id="scan-panel">
   <div class="counter-bar">
     <div class="counter-info"><span id="counter-label">選択済み</span> <strong id="selected-count">0</strong> 件</div>
@@ -250,8 +279,11 @@
 
 <script>
 (function() {
-  var API_BASE = 'https://ikura-ocr-proxy.lunaless.workers.dev';
+  var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? 'http://localhost:8787'
+    : 'https://ikura-ocr-proxy.lunaless.workers.dev';
   var currentUser = null;
+  var connectionApiKeySaved = false;
   var mode = 'bas';              // 'bas'=買取 / 'big'=店間移動 / 'catalog'=カタログ登録
   var defaultCategoryId = null;  // カタログ登録: 直近入力を記憶してプリフィル
   var stream = null;
@@ -298,7 +330,7 @@
   }
 
   function hideAppPanels() {
-    ['mode-panel', 'scan-panel', 'confirm-panel', 'done-panel'].forEach(function(id) {
+    ['connection-panel', 'mode-panel', 'scan-panel', 'confirm-panel', 'done-panel'].forEach(function(id) {
       el(id).style.display = 'none';
     });
     el('cat-modal').classList.remove('show');
@@ -307,9 +339,11 @@
 
   function showLogin() {
     currentUser = null;
+    connectionApiKeySaved = false;
     stopCamera();
     hideAppPanels();
     el('setup-panel').style.display = 'flex';
+    el('btn-settings').style.display = 'none';
     el('btn-logout').style.display = 'none';
     el('mode-badge').textContent = 'ログイン';
   }
@@ -319,8 +353,91 @@
     el('setup-panel').style.display = 'none';
     hideAppPanels();
     el('mode-panel').style.display = 'block';
-    el('btn-logout').style.display = '';
+    el('btn-logout').style.display = 'inline-block';
+    el('btn-settings').style.display = (user && user.role === 'admin') ? 'inline-block' : 'none';
     el('mode-badge').textContent = (user && user.name) ? user.name : 'モード選択';
+  }
+
+  function handleAuthenticatedUser(user) {
+    currentUser = user;
+    if (user && user.needsSetup) {
+      openConnectionSettings(true);
+    } else {
+      showModeSelect(user);
+    }
+  }
+
+  async function openConnectionSettings(firstSetup) {
+    stopCamera();
+    el('setup-panel').style.display = 'none';
+    hideAppPanels();
+    el('connection-panel').style.display = 'block';
+    el('btn-logout').style.display = 'inline-block';
+    el('btn-settings').style.display = 'none';
+    el('mode-badge').textContent = '接続設定';
+    el('connection-api-key').value = '';
+    el('connection-cancel').style.display = firstSetup ? 'none' : '';
+
+    var isAdmin = currentUser && currentUser.role === 'admin';
+    ['connection-store-name', 'connection-store-id', 'connection-api-key'].forEach(function(id) {
+      el(id).disabled = !isAdmin;
+    });
+    el('connection-save').style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) {
+      el('connection-notice').textContent = '管理者がRECORE接続を設定するまでお待ちください。';
+      return;
+    }
+
+    el('connection-notice').textContent = firstSetup
+      ? '初回設定を完了するとスキャンを開始できます。'
+      : '保存済みAPIキーは表示しません。変更するときだけ新しいキーを入力してください。';
+    showLoading('接続設定を確認中...');
+    try {
+      var res = await apiFetch('/admin/connection');
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || '接続設定を取得できませんでした');
+      connectionApiKeySaved = !!data.apiKeySaved;
+      el('connection-store-name').value = data.storeName || '';
+      el('connection-store-id').value = data.storeId || '';
+      el('connection-api-key').placeholder = data.apiKeySaved
+        ? '保存済み（変更時のみ入力）'
+        : 'RECORE APIキーを入力';
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      hideLoading();
+    }
+  }
+
+  async function saveConnection() {
+    var storeName = el('connection-store-name').value.trim();
+    var storeId = el('connection-store-id').value.trim();
+    var apiKey = el('connection-api-key').value.trim();
+    if (!storeName || !storeId || (!connectionApiKeySaved && !apiKey)) {
+      showToast('店舗名、店舗ID' + (!connectionApiKeySaved ? '、APIキー' : '') + 'を入力してください', 'error');
+      return;
+    }
+    el('connection-save').disabled = true;
+    showLoading('接続設定を暗号化して保存中...');
+    try {
+      var res = await apiFetch('/admin/connection', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'recore', storeName: storeName, storeId: storeId, apiKey: apiKey })
+      });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || '接続設定を保存できませんでした');
+      el('connection-api-key').value = '';
+      connectionApiKeySaved = true;
+      currentUser = data.user;
+      showModeSelect(data.user);
+      showToast('RECORE接続を保存しました', 'success');
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      hideLoading();
+      el('connection-save').disabled = false;
+    }
   }
 
   // ===== STEP1: スタッフログイン =====
@@ -343,7 +460,7 @@
       var data = await res.json().catch(function() { return {}; });
       if (!res.ok) throw new Error(data.error || 'ログインできませんでした');
       el('staff-pin').value = '';
-      showModeSelect(data.user);
+      handleAuthenticatedUser(data.user);
       showToast((data.user.name || staffCode) + 'さん、ログインしました', 'success');
     } catch (e) {
       showToast(e.message, 'error');
@@ -359,7 +476,7 @@
       var res = await apiFetch('/auth/session');
       if (!res.ok) { showLogin(); return; }
       var data = await res.json();
-      showModeSelect(data.user);
+      handleAuthenticatedUser(data.user);
     } catch (e) {
       showLogin();
     } finally {
@@ -1111,6 +1228,9 @@
   // ===== イベント =====
   el('btn-start').addEventListener('click', goModeSelect);
   el('btn-logout').addEventListener('click', logout);
+  el('btn-settings').addEventListener('click', function() { openConnectionSettings(false); });
+  el('connection-save').addEventListener('click', saveConnection);
+  el('connection-cancel').addEventListener('click', function() { showModeSelect(currentUser); });
   ['company-code', 'staff-code', 'staff-pin'].forEach(function(id) {
     el(id).addEventListener('keydown', function(e) { if (e.key === 'Enter') goModeSelect(); });
   });

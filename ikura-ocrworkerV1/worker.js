@@ -52,6 +52,12 @@ export default {
           "Set-Cookie": clearSessionCookie(request),
         });
       }
+      if (path === "/admin/connection" && request.method === "GET") {
+        return await getConnection(request, env, session);
+      }
+      if (path === "/admin/connection" && request.method === "PUT") {
+        return await saveConnection(request, env, session);
+      }
       if (path === "/admin/staff" && request.method === "GET") return await listStaff(request, env, session);
       if (path === "/admin/staff" && request.method === "POST") return await createStaff(request, env, session);
       if (path.startsWith("/recore/")) {
@@ -70,8 +76,8 @@ export default {
 };
 
 async function handleBootstrap(request, env) {
-  if (!env.BOOTSTRAP_SECRET || !env.API_KEY_ENCRYPTION_KEY) {
-    return json(request, env, { error: "Bootstrap secrets are not configured" }, 503);
+  if (!env.BOOTSTRAP_SECRET) {
+    return json(request, env, { error: "BOOTSTRAP_SECRET is not configured" }, 503);
   }
   const supplied = request.headers.get("X-Bootstrap-Secret") || "";
   if (!(await safeStringEqual(supplied, env.BOOTSTRAP_SECRET))) {
@@ -81,14 +87,10 @@ async function handleBootstrap(request, env) {
   const body = await readJson(request);
   const companyCode = normalizeCode(body.companyCode);
   const staffCode = normalizeCode(body.staffCode);
-  const companyName = cleanText(body.companyName, 100);
-  const staffName = cleanText(body.staffName, 100);
-  const storeName = cleanText(body.storeName, 100);
-  const recoreStoreId = cleanText(String(body.recoreStoreId || ""), 100);
-  const recoreApiKey = typeof body.recoreApiKey === "string" ? body.recoreApiKey.trim() : "";
+  const companyName = cleanText(body.companyName, 100) || companyCode;
+  const staffName = cleanText(body.staffName, 100) || "管理者";
   const pin = String(body.pin || "");
-  if (!validCode(companyCode) || !validCode(staffCode) || !companyName || !staffName ||
-      !storeName || !recoreStoreId || !recoreApiKey || !validPin(pin)) {
+  if (!validCode(companyCode) || !validCode(staffCode) || !validPin(pin)) {
     return json(request, env, { error: "Invalid bootstrap payload" }, 400);
   }
 
@@ -99,16 +101,15 @@ async function handleBootstrap(request, env) {
   const tenantId = crypto.randomUUID();
   const storeId = crypto.randomUUID();
   const staffId = crypto.randomUUID();
-  const encrypted = await encryptSecret(recoreApiKey, env.API_KEY_ENCRYPTION_KEY);
   const pinRecord = await hashPin(pin);
   const now = Math.floor(Date.now() / 1000);
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO tenants (id, code, name, recore_api_key_ciphertext, recore_api_key_iv, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)"
-    ).bind(tenantId, companyCode, companyName, encrypted.ciphertext, encrypted.iv, now),
+      "INSERT INTO tenants (id, code, name, active, created_at) VALUES (?, ?, ?, 1, ?)"
+    ).bind(tenantId, companyCode, companyName, now),
     env.DB.prepare(
-      "INSERT INTO stores (id, tenant_id, name, recore_store_id, active, created_at) VALUES (?, ?, ?, ?, 1, ?)"
-    ).bind(storeId, tenantId, storeName, recoreStoreId, now),
+      "INSERT INTO stores (id, tenant_id, name, recore_store_id, active, created_at) VALUES (?, ?, '未設定', NULL, 1, ?)"
+    ).bind(storeId, tenantId, now),
     env.DB.prepare(
       "INSERT INTO staff (id, tenant_id, store_id, code, name, role, pin_hash, pin_salt, active, created_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, ?, 1, ?)"
     ).bind(staffId, tenantId, storeId, staffCode, staffName, pinRecord.hash, pinRecord.salt, now),
@@ -139,10 +140,12 @@ async function handleLogin(request, env) {
   const row = await env.DB.prepare(
     `SELECT s.id AS staff_id, s.name AS staff_name, s.role, s.pin_hash, s.pin_salt,
             s.store_id, t.id AS tenant_id, t.name AS company_name,
-            st.name AS store_name, st.recore_store_id
+            st.name AS store_name, st.recore_store_id,
+            c.credentials_ciphertext
        FROM staff s
        JOIN tenants t ON t.id = s.tenant_id AND t.active = 1
        JOIN stores st ON st.id = s.store_id AND st.active = 1
+       LEFT JOIN connections c ON c.tenant_id = t.id AND c.provider = 'recore' AND c.active = 1
       WHERE t.code = ? AND s.code = ? AND s.active = 1`
   ).bind(companyCode, staffCode).first();
   let valid = false;
@@ -187,6 +190,80 @@ async function handleSession(request, env) {
   }
   return json(request, env, {
     authenticated: true, user: publicSession(session), expiresAt: Number(session.expires_at),
+  });
+}
+
+async function getConnection(request, env, session) {
+  if (session.role !== "admin") return json(request, env, { error: "Forbidden" }, 403);
+  const row = await env.DB.prepare(
+    `SELECT c.provider, c.credentials_ciphertext, st.name AS store_name, st.recore_store_id
+       FROM stores st
+       LEFT JOIN connections c ON c.tenant_id = st.tenant_id
+         AND c.provider = 'recore' AND c.active = 1
+      WHERE st.id = ? AND st.tenant_id = ? AND st.active = 1`
+  ).bind(session.store_id, session.tenant_id).first();
+  if (!row) return json(request, env, { error: "Store not found" }, 404);
+  return json(request, env, {
+    provider: "recore",
+    configured: Boolean(row.credentials_ciphertext && row.recore_store_id),
+    storeName: row.store_name === "未設定" ? "" : row.store_name,
+    storeId: row.recore_store_id || "",
+    apiKeySaved: Boolean(row.credentials_ciphertext),
+  });
+}
+
+async function saveConnection(request, env, session) {
+  if (session.role !== "admin") return json(request, env, { error: "Forbidden" }, 403);
+  if (!env.API_KEY_ENCRYPTION_KEY) {
+    return json(request, env, { error: "Encryption key is not configured" }, 503);
+  }
+  const body = await readJson(request);
+  const provider = String(body.provider || "").toLowerCase();
+  const storeName = cleanText(body.storeName, 100);
+  const storeId = cleanText(String(body.storeId || ""), 100);
+  const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  if (provider !== "recore" || !storeName || !storeId) {
+    return json(request, env, { error: "接続先、店舗名、店舗IDを入力してください" }, 400);
+  }
+
+  const existing = await env.DB.prepare(
+    "SELECT id, credentials_ciphertext, credentials_iv FROM connections WHERE tenant_id = ? AND provider = 'recore'"
+  ).bind(session.tenant_id).first();
+  if (!existing && !apiKey) {
+    return json(request, env, { error: "初回設定ではAPIキーが必要です" }, 400);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  let connectionStatement;
+  if (apiKey) {
+    const encrypted = await encryptSecret(apiKey, env.API_KEY_ENCRYPTION_KEY);
+    connectionStatement = env.DB.prepare(
+      `INSERT INTO connections
+         (id, tenant_id, provider, credentials_ciphertext, credentials_iv, active, created_at, updated_at)
+       VALUES (?, ?, 'recore', ?, ?, 1, ?, ?)
+       ON CONFLICT(tenant_id, provider) DO UPDATE SET
+         credentials_ciphertext = excluded.credentials_ciphertext,
+         credentials_iv = excluded.credentials_iv,
+         active = 1,
+         updated_at = excluded.updated_at`
+    ).bind(existing ? existing.id : crypto.randomUUID(), session.tenant_id,
+      encrypted.ciphertext, encrypted.iv, now, now);
+  } else {
+    connectionStatement = env.DB.prepare(
+      "UPDATE connections SET active = 1, updated_at = ? WHERE tenant_id = ? AND provider = 'recore'"
+    ).bind(now, session.tenant_id);
+  }
+
+  await env.DB.batch([
+    connectionStatement,
+    env.DB.prepare(
+      "UPDATE stores SET name = ?, recore_store_id = ? WHERE id = ? AND tenant_id = ?"
+    ).bind(storeName, storeId, session.store_id, session.tenant_id),
+  ]);
+  return json(request, env, {
+    ok: true,
+    connection: { provider: "recore", configured: true, storeName, storeId, apiKeySaved: true },
+    user: { ...publicSession(session), storeName, needsSetup: false },
   });
 }
 
@@ -241,12 +318,13 @@ async function requireSession(request, env) {
   return env.DB.prepare(
     `SELECT se.expires_at, s.id AS staff_id, s.name AS staff_name, s.role, s.store_id,
             t.id AS tenant_id, t.name AS company_name,
-            t.recore_api_key_ciphertext, t.recore_api_key_iv,
+            c.credentials_ciphertext, c.credentials_iv,
             st.name AS store_name, st.recore_store_id
        FROM sessions se
        JOIN staff s ON s.id = se.staff_id AND s.active = 1
        JOIN tenants t ON t.id = s.tenant_id AND t.active = 1
        JOIN stores st ON st.id = s.store_id AND st.active = 1
+       LEFT JOIN connections c ON c.tenant_id = t.id AND c.provider = 'recore' AND c.active = 1
       WHERE se.token_hash = ? AND se.expires_at > ?`
   ).bind(await sha256Hex(token), Math.floor(Date.now() / 1000)).first();
 }
@@ -261,9 +339,12 @@ async function proxyRecore(request, env, session, upstreamPath) {
   if (!env.API_KEY_ENCRYPTION_KEY) {
     return json(request, env, { error: "Encryption key is not configured" }, 503);
   }
+  if (!session.credentials_ciphertext || !session.credentials_iv || !session.recore_store_id) {
+    return json(request, env, { error: "Connection setup required" }, 409);
+  }
 
   const apiKey = await decryptSecret(
-    session.recore_api_key_ciphertext, session.recore_api_key_iv, env.API_KEY_ENCRYPTION_KEY
+    session.credentials_ciphertext, session.credentials_iv, env.API_KEY_ENCRYPTION_KEY
   );
   const sourceUrl = new URL(request.url);
   const upstreamUrl = new URL(decodedPath + sourceUrl.search, RECORE_API_URL);
@@ -336,7 +417,13 @@ async function handleOcr(request, env) {
 }
 
 function publicSession(row) {
-  return { name: row.staff_name, role: row.role, companyName: row.company_name, storeName: row.store_name };
+  return {
+    name: row.staff_name,
+    role: row.role,
+    companyName: row.company_name,
+    storeName: row.store_name === "未設定" ? "" : row.store_name,
+    needsSetup: !row.credentials_ciphertext || !row.recore_store_id,
+  };
 }
 
 async function recordLoginFailure(db, key, attempt, now) {
@@ -496,7 +583,7 @@ function originAllowed(request, env) {
 
 function corsHeaders(request, env) {
   const headers = new Headers({
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Bootstrap-Secret",
     "Access-Control-Allow-Credentials": "true",
     "Cache-Control": "no-store",
