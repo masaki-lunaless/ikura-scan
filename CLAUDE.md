@@ -19,8 +19,10 @@
 ```text
 iPhone / browser
   ├─ UI and camera capture (single-page index.html)
+  ├─ ImageCapture.takePhoto(): high-resolution still capture when supported
+  ├─ Display P3 canvas pipeline (sRGB fallback)
   ├─ OpenCV.js: one-pass edge detection, rigid rotation, inner crop
-  ├─ catalog registration queue (up to 20 items)
+  ├─ catalog registration queue (up to 1000 items)
   └─ direct PUT to a RECORE-issued signed upload URL
             │ authenticated same-origin API
             ▼
@@ -29,7 +31,7 @@ Cloudflare Worker
   ├─ staff authentication and session management
   ├─ Anthropic OCR proxy
   ├─ RECORE allowlisted API proxy
-  ├─ bounded-concurrency catalog bulk endpoint
+  ├─ validated proxy to RECORE's official product bulk endpoint
   └─ Cloudflare D1
        ├─ tenants / stores / staff
        ├─ encrypted RECORE connection metadata
@@ -62,7 +64,9 @@ cmp -s index.html ikura-ocrworkerV1/public/index.html
 
 ### カタログ登録時の処理
 
-撮影時に2系統の画像を作ります。
+Safari 18.4以降は`ImageCapture.takePhoto()`で動画フレームではなく高解像度静止画を撮影します。未対応環境だけ従来のvideoフレームへフォールバックします。CanvasはDisplay P3を要求し、未対応ならsRGBへフォールバックします。色を人工的に補正せず、カメラが持つ色域と階調を途中で捨てない方針です。出力はカード比率に応じて高さ2640 px、JPEG quality 0.98です。
+
+撮影時に同じ静止画から2系統の画像を作ります。
 
 1. OCR用: 内側のカードガイドを中心にクロップし、文字へ画素を集中させる
 2. RECORE画像用: 外側のスキャン枠を取得し、カード外周を検出・補正する
@@ -164,14 +168,16 @@ category ID validation
   -> OCR
   -> duplicate search by pa_mpn
   -> add item to the browser-side registration queue
-  -> continue capture (up to 20 items)
+  -> upload the image to a RECORE-issued signed URL in the background
+  -> release the base64 image from browser memory
+  -> continue capture (up to 1000 items)
   -> one final user action starts bulk submission
-  -> browser requests signed public upload URLs and PUTs images with concurrency 3
+  -> wait for any remaining image uploads with concurrency 3
   -> POST /catalog/bulk once
-  -> Worker duplicate-checks and POSTs /products with concurrency 3
+  -> Worker validates and POSTs the array once to RECORE /products/bulk
 ```
 
-RECOREの公開された正式バルク商品登録endpointは確認できないため、`/catalog/bulk`はアプリ独自の一括受付です。店舗スタッフの操作とブラウザからWorkerへの登録要求は一回ですが、WorkerからRECOREへは商品ごとの重複確認と登録を制限並列で行います。個別失敗は他商品を止めず、失敗分だけブラウザのキューに残します。
+RECORE公式仕様の`POST /products/bulk`（scope: `product:bulk:store`、1〜1000件）を使用します。`/catalog/bulk`はブラウザから秘密情報を隠し、入力を検証して公式endpointへ商品配列を一度だけ転送するWorker側の入口です。公式バルクはリクエスト単位で成功・失敗するため、RECOREがエラーを返した場合は商品キュー全体を残します。
 
 画像はCloudflareへ保存しません。RECOREが発行した署名URLへブラウザから直接アップロードします。
 

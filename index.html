@@ -203,7 +203,7 @@
   <button class="mode-card" data-mode="big">🚚 店間移動モード
     <small>型番を読み取り、一般仕入れケースを作成（疑似店間移動）</small></button>
   <button class="mode-card" data-mode="catalog">🗂 カタログ登録モード
-    <small>カードを白背景に整えて、カテゴリ指定で商品マスタに登録</small></button>
+    <small>カード外周を高画質で切り出し、カテゴリ指定で商品マスタに一括登録</small></button>
 </div>
 
 <!-- STEP4: スキャン -->
@@ -639,12 +639,17 @@
     el('btn-modeback').style.display = 'none';
   }
 
-  // 指定フレーム(+マージン)にクロップして撮影
-  // object-fit:cover の表示座標を動画の実ピクセルへ逆変換してクロップ
-  function captureFrameCanvas(frameEl, pad) {
-    var video = el('video');
-    var vW = video.videoWidth, vH = video.videoHeight;
-    var canvas = el('canvas');
+  function canvas2d(canvas, options) {
+    try {
+      var wide = canvas.getContext('2d', Object.assign({ colorSpace: 'display-p3' }, options || {}));
+      if (wide) return wide;
+    } catch (e) { /* sRGB fallback */ }
+    return canvas.getContext('2d', options || {});
+  }
+
+  // 任意の静止画を、object-fit:cover の表示座標から指定フレームへ逆変換してクロップする。
+  function cropSourceCanvas(sourceCanvas, frameEl, pad) {
+    var vW = sourceCanvas.width, vH = sourceCanvas.height;
     if (!vW || !vH) return null;
     var box = el('camera-box').getBoundingClientRect();
     var frame = frameEl.getBoundingClientRect();
@@ -656,22 +661,62 @@
     var cropW = fx * visW, cropH = fy * visH;
     var cropX = offX + (visW - cropW) / 2;
     var cropY = offY + (visH - cropH) / 2;
+    var canvas = document.createElement('canvas');
     canvas.width = Math.round(cropW);
     canvas.height = Math.round(cropH);
-    canvas.getContext('2d').drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    canvas2d(canvas).drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
     return canvas;
   }
 
-  // canvas → data URL（PNG無圧縮。ただし約5MB超はJPEGにフォールバック）
+  function captureFrameCanvas(frameEl, pad) {
+    return cropSourceCanvas(fullFrameCanvas(), frameEl, pad);
+  }
+
+  function photoBlobToCanvas(blob) {
+    return new Promise(function(resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var image = new Image();
+      image.onload = function() {
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          canvas2d(canvas).drawImage(image, 0, 0);
+          URL.revokeObjectURL(url);
+          resolve(canvas);
+        } catch (error) {
+          URL.revokeObjectURL(url);
+          reject(error);
+        }
+      };
+      image.onerror = function() {
+        URL.revokeObjectURL(url);
+        reject(new Error('静止画の読み込みに失敗'));
+      };
+      image.src = url;
+    });
+  }
+
+  // Safari 18.4以降は、動画の1フレームではなく高解像度の静止画を取得する。
+  async function captureStillCanvas() {
+    var track = stream && stream.getVideoTracks()[0];
+    if (track && window.ImageCapture) {
+      try {
+        var blob = await new window.ImageCapture(track).takePhoto();
+        if (blob && blob.size) return await photoBlobToCanvas(blob);
+      } catch (e) { /* 未対応端末では動画フレームへフォールバック */ }
+    }
+    return fullFrameCanvas();
+  }
+
+  // OCR用は高品質JPEGへ直接変換し、12MP静止画を一度PNG化するメモリ浪費を避ける。
   function canvasToUrl(c) {
-    var u = c.toDataURL('image/png');
-    if (u.length > 6500000) u = c.toDataURL('image/jpeg', 0.92);
-    return u;
+    return c.toDataURL('image/jpeg', 0.96);
   }
   function fullFrameCanvas() {
     var v = el('video'), c = el('canvas');
     c.width = v.videoWidth; c.height = v.videoHeight;
-    c.getContext('2d').drawImage(v, 0, 0);
+    canvas2d(c).drawImage(v, 0, 0);
     return c;
   }
   // ===== カードスキャナー (OpenCV.js) =====
@@ -691,9 +736,9 @@
     'ディズニーロルカナ': [63, 88]
   };
   var CARD_RATIO = 63 / 88;
-  // RECORE側で再縮小されても文字と細線が残るよう、従来の約1.55倍で生成する。
-  var CARD_WIDTH = 1260;
-  var CARD_HEIGHT = 1760;
+  // 高解像度静止画の細線を残し、RECORE側で再縮小されても文字を潰さない。
+  var CARD_WIDTH = 1890;
+  var CARD_HEIGHT = 2640;
   var CARD_GUIDE_TO_FRAME = 56 / 82;
   // 検出外周の外側は取らず、さらに内側へ少量クロップして机の混入を防ぐ。
   var CARD_EDGE_SAFETY = 0;
@@ -999,7 +1044,7 @@
     var rotated = document.createElement('canvas');
     rotated.width = sourceCanvas.width;
     rotated.height = sourceCanvas.height;
-    var rctx = rotated.getContext('2d');
+    var rctx = canvas2d(rotated);
     rctx.imageSmoothingEnabled = true;
     rctx.imageSmoothingQuality = 'high';
     rctx.translate(center.x, center.y);
@@ -1031,7 +1076,7 @@
 
     var canvas = document.createElement('canvas');
     canvas.width = CARD_WIDTH; canvas.height = CARD_HEIGHT;
-    var ctx = canvas.getContext('2d');
+    var ctx = canvas2d(canvas);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(rotated, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
@@ -1045,7 +1090,7 @@
     var sy = Math.max(0, Math.round((sourceCanvas.height - cropHeight) / 2));
     var canvas = document.createElement('canvas');
     canvas.width = CARD_WIDTH; canvas.height = CARD_HEIGHT;
-    var ctx = canvas.getContext('2d');
+    var ctx = canvas2d(canvas);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(sourceCanvas, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
@@ -1078,12 +1123,16 @@
     el('camera-box').setAttribute('aria-disabled', 'true');
     el('btn-shoot').disabled = true;
     el('freeze').style.display = 'none'; // 直前の凍結を解除してから撮影
+    showLoading('高画質静止画を撮影中...');
+    var sourceFrame;
+    try { sourceFrame = await captureStillCanvas(); }
+    catch (e) { sourceFrame = fullFrameCanvas(); }
     var ocrUrl;
     if (mode === 'catalog') {
       // OCR用: 内枠(カード)に画素を集中
-      ocrUrl = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.12) || fullFrameCanvas());
-      // EC画像: 外枠(カード+背景リング)からカードを検出→台形補正で切り出し
-      var outer = captureFrameCanvas(el('scan-frame'), 0.05) || fullFrameCanvas();
+      ocrUrl = canvasToUrl(cropSourceCanvas(sourceFrame, el('card-guide'), 0.12) || sourceFrame);
+      // EC画像: 同じ高解像度静止画から外周を検出し、剛体回転＋内側クロップする。
+      var outer = cropSourceCanvas(sourceFrame, el('scan-frame'), 0.05) || sourceFrame;
       showLoading('カード検出中...');
       try {
         var extraction = await extractCardCanvas(outer);
@@ -1094,16 +1143,16 @@
           showToast('輪郭が不鮮明なため、ガイド枠で切り出しました', '');
         }
       } catch (e) {
-        // OpenCV自体が失敗しても、ガイド枠から白背景画像を作って登録は継続する。
+        // OpenCV自体が失敗しても、ガイド枠から切り出して登録は継続する。
         lastCardImage = makeWhiteCatalogCanvas(guideCropCanvas(outer)).toDataURL('image/jpeg', 0.98);
         showToast('自動補正を使えなかったため、ガイド枠で切り出しました', '');
       }
       hideLoading();
       el('freeze').src = lastCardImage; // 切り出したカードをプレビュー
     } else {
-      ocrUrl = canvasToUrl(captureFrameCanvas(el('scan-frame'), 0.5) || fullFrameCanvas());
+      ocrUrl = canvasToUrl(cropSourceCanvas(sourceFrame, el('scan-frame'), 0.5) || sourceFrame);
       lastCardImage = null;
-      el('freeze').src = fullFrameCanvas().toDataURL('image/jpeg', 0.6);
+      el('freeze').src = sourceFrame.toDataURL('image/jpeg', 0.92);
     }
     // iPhone風: 撮れた写真を凍結表示（ライブ映像の揺れを隠す）
     el('freeze').style.display = 'block';
@@ -1456,8 +1505,8 @@
 
   // ===== カタログ連続登録: 端末キューへ追加し、最後に一括送信 =====
   function queueCatalog(f, btn) {
-    if (selectedProducts.length >= 20) {
-      showToast('一括登録は20件までです。先に送信してください', 'error');
+    if (selectedProducts.length >= 1000) {
+      showToast('RECORE一括登録の上限1000件です。先に送信してください', 'error');
       return;
     }
     if (f.mpn && selectedProducts.some(function(item) { return item.mpn === f.mpn; })) {
@@ -1465,7 +1514,7 @@
       return;
     }
     if (btn) btn.disabled = true;
-    selectedProducts.push({
+    var item = {
       queueId: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + selectedProducts.length),
       queued: true,
       title: f.title,
@@ -1474,11 +1523,41 @@
       categoryId: f.categoryId,
       rarity: f.rarity,
       expansion: f.expansion,
-      imageData: f.usePhoto ? lastCardImage : null
-    });
+      imageData: f.usePhoto ? lastCardImage : null,
+      imageUrl: null,
+      uploadState: f.usePhoto && lastCardImage ? 'pending' : 'ready',
+      uploadPromise: null
+    };
+    selectedProducts.push(item);
     updateList();
     resetResultView();
     showToast('登録待ちに追加しました ✓ 次のカードへ', 'success');
+    // 1000件でも端末メモリへ画像を溜めないよう、撮影後すぐに画像だけ先行アップロードする。
+    ensureCatalogImageUploaded(item);
+  }
+
+  function ensureCatalogImageUploaded(item) {
+    if (item.imageUrl || !item.imageData) {
+      item.uploadState = 'ready';
+      return Promise.resolve({ ok: true, item: item });
+    }
+    if (item.uploadPromise) return item.uploadPromise;
+    item.uploadState = 'uploading';
+    updateList();
+    item.uploadPromise = uploadImageToRecore(item.imageData).then(function(url) {
+      item.imageUrl = url;
+      item.imageData = null;
+      item.uploadState = 'ready';
+      item.uploadPromise = null;
+      updateList();
+      return { ok: true, item: item };
+    }).catch(function(error) {
+      item.uploadState = 'failed';
+      item.uploadPromise = null;
+      updateList();
+      return { ok: false, item: item, error: error.message };
+    });
+    return item.uploadPromise;
   }
 
   async function mapWithConcurrency(items, limit, mapper) {
@@ -1500,33 +1579,31 @@
     if (!batch.length) { showToast('登録待ちがありません', 'error'); return; }
     el('btn-finish').disabled = true;
     var uploaded = 0;
-    showLoading('画像アップロード 0/' + batch.length);
+    showLoading('画像確認 0/' + batch.length);
     try {
-      var prepared = await mapWithConcurrency(batch, 3, async function(item) {
-        try {
-          var imageUrls = [];
-          if (item.imageData) imageUrls.push(await uploadImageToRecore(item.imageData));
-          uploaded++;
-          showLoading('画像アップロード ' + uploaded + '/' + batch.length);
-          return {
-            clientId: item.queueId,
-            title: item.title,
-            mpn: item.mpn,
-            categoryId: item.categoryId,
-            rarity: item.rarity,
-            expansion: item.expansion,
-            imageUrls: imageUrls
-          };
-        } catch (error) {
-          return { clientId: item.queueId, uploadError: error.message };
-        }
+      var uploadResults = await mapWithConcurrency(batch, 3, async function(item) {
+        var result = await ensureCatalogImageUploaded(item);
+        uploaded++;
+        showLoading('画像確認 ' + uploaded + '/' + batch.length);
+        return result;
       });
-      var ready = prepared.filter(function(item) { return !item.uploadError; });
-      var failedIds = prepared.filter(function(item) { return item.uploadError; })
-        .map(function(item) { return item.clientId; });
-      var created = 0, existing = 0;
+      var readyItems = uploadResults.filter(function(result) { return result.ok; })
+        .map(function(result) { return result.item; });
+      var failedIds = uploadResults.filter(function(result) { return !result.ok; })
+        .map(function(result) { return result.item.queueId; });
+      var created = 0;
+      var ready = readyItems.map(function(item) {
+        return {
+          title: item.title,
+          mpn: item.mpn,
+          categoryId: item.categoryId,
+          rarity: item.rarity,
+          expansion: item.expansion,
+          imageUrls: item.imageUrl ? [item.imageUrl] : []
+        };
+      });
       if (ready.length) {
-        showLoading('RECOREへ一括登録中...');
+        showLoading('RECOREへ' + ready.length + '件を一括登録中...');
         var res = await apiFetch('/catalog/bulk', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1534,19 +1611,15 @@
         });
         if (!res.ok) throw new Error('一括登録 ' + res.status + ': ' + (await res.text()));
         var data = await res.json();
-        (data.results || []).forEach(function(result) {
-          if (result.status === 'created') created++;
-          else if (result.status === 'existing') existing++;
-          else failedIds.push(result.clientId);
-        });
+        created = data.summary && data.summary.created != null ? data.summary.created : ready.length;
       }
       selectedProducts = batch.filter(function(item) { return failedIds.indexOf(item.queueId) >= 0; });
       updateList();
       hideLoading();
       if (!selectedProducts.length) {
-        showDone(created + '件を新規登録' + (existing ? '、' + existing + '件は登録済み' : ''), null);
+        showDone(created + '件を一括登録しました', null);
       } else {
-        showToast((created + existing) + '件成功、' + selectedProducts.length + '件失敗。失敗分をキューに残しました', 'error');
+        showToast(created + '件成功、' + selectedProducts.length + '件は画像失敗。失敗分をキューに残しました', 'error');
       }
     } catch (e) {
       hideLoading();
@@ -1562,7 +1635,8 @@
     el('btn-finish').disabled = count === 0;
     el('selected-list').style.display = count > 0 ? 'block' : 'none';
     el('selected-items-container').innerHTML = selectedProducts.map(function(p, i) {
-      var priceLabel = p.queued ? '待機' : ((p.buy != null) ? '買 ' + yen(p.buy) : '');
+      var queueState = p.uploadState === 'uploading' ? '画像中' : p.uploadState === 'failed' ? '画像失敗' : '待機';
+      var priceLabel = p.queued ? queueState : ((p.buy != null) ? '買 ' + yen(p.buy) : '');
       return '<div class="selected-item">' +
         '<span class="check">✓</span>' +
         '<span class="name">' + (p.title || p.code).substring(0, 24) + '</span>' +
