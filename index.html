@@ -44,7 +44,9 @@
   .btn-finish { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
   .camera-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-  .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); }
+  .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .camera-box:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .camera-box.capture-busy { cursor: wait; }
   .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
   #freeze { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 3; background: #000; }
@@ -54,6 +56,7 @@
   .card-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); height: 56%; aspect-ratio: 63/88; border: 2px dashed rgba(255,255,255,0.75); border-radius: 6px; display: none; } /* 内枠=カードを合わせる位置 */
   .card-guide.show { display: block; }
   .card-guide::after { content: 'カードをここに'; position: absolute; top: -22px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(255,255,255,0.7); }
+  .capture-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 5; pointer-events: none; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,0.65); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; backdrop-filter: blur(4px); }
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .manual-input-row { display: flex; gap: 8px; }
@@ -160,7 +163,7 @@
   <button class="mode-card" data-mode="big">🚚 店間移動モード
     <small>型番を読み取り、一般仕入れケースを作成（疑似店間移動）</small></button>
   <button class="mode-card" data-mode="catalog">🗂 カタログ登録モード
-    <small>背景除去＋カテゴリ指定で商品マスタに登録</small></button>
+    <small>カードを白背景に整えて、カテゴリ指定で商品マスタに登録</small></button>
 </div>
 
 <!-- STEP3: スキャン -->
@@ -170,10 +173,11 @@
     <button class="btn-finish" id="btn-finish" disabled>完了 →</button>
   </div>
   <div class="camera-section">
-    <div class="camera-box" id="camera-box">
+    <div class="camera-box" id="camera-box" role="button" tabindex="0" aria-label="カメラ映像をタップして撮影">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div><div class="card-guide" id="card-guide"></div></div>
       <img id="freeze" alt="">
+      <div class="capture-hint">画面をタップして撮影</div>
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
@@ -250,8 +254,9 @@
   var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
   var lastExtract = { title: '' };// カタログ登録: フルOCRの抽出結果
   var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
-  var lastCardImage = null;      // カタログ登録: 切り出し済みカード画像(data URL)
-  var scannerPromise = null;     // OpenCV.js + jscanify のロード
+  var lastCardImage = null;      // カタログ登録: 白背景に整えたカード画像(data URL)
+  var scannerPromise = null;     // OpenCV.js のロード
+  var isShooting = false;        // 映像タップと下部ボタンの二重発火を防ぐ
 
   function el(id) { return document.getElementById(id); }
   function getApiKey() { return el('api-key').value.trim(); }
@@ -357,7 +362,8 @@
     navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment',
-        width: { ideal: 2560 }, height: { ideal: 1440 }
+        // 対応端末では4Kの動画フレームを要求する。未対応端末は自動で下位解像度へ落ちる。
+        width: { ideal: 3840 }, height: { ideal: 2160 }
         // ※ focusMode:continuous はAFハンチング(画面の揺れ)を招くため指定しない
       }
     }).then(function(s) {
@@ -429,7 +435,18 @@
     c.getContext('2d').drawImage(v, 0, 0);
     return c;
   }
-  // ===== カードスキャナー (OpenCV.js + jscanify) =====
+  // ===== カードスキャナー (OpenCV.js) =====
+  // jscanify の「最大輪郭=紙」という判定は、プレイマットの柄やカード内の枠を
+  // 誤検出しても成功扱いになる。カード比率・面積・中央位置・直角度を採点し、
+  // 信頼度が低い場合はユーザーが合わせたガイド枠を使う。
+  var CARD_RATIO = 63 / 88;
+  // RECORE側で再縮小されても文字と細線が残るよう、従来の約1.55倍で生成する。
+  var CARD_WIDTH = 1260;
+  var CARD_HEIGHT = 1760;
+  var CARD_GUIDE_TO_FRAME = 56 / 82;
+  // 検出輪郭ぴったりで切ると外枠のアンチエイリアスまで欠けるため、各辺を1.5%広げる。
+  var CARD_EDGE_SAFETY = 0.015;
+
   function loadScannerScript(src) {
     return new Promise(function(resolve, reject) {
       var s = document.createElement('script');
@@ -450,33 +467,236 @@
           setTimeout(waitCv, 50);
         })();
       });
-    }).then(function() {
-      return loadScannerScript('https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.min.js');
-    }).then(function() {
-      return new jscanify();
     });
     return scannerPromise;
   }
-  // カード四隅を検出→台形補正で長方形に切り出し（トレカ 63:88）
-  async function extractCardCanvas(sourceCanvas) {
-    var scanner = await loadScanner();
-    return scanner.extractPaper(sourceCanvas, 810, 1132); // 810*88/63≈1131
+
+  function pointDistance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
-  // canvasを長辺maxEdgeに縮小したJPEG data URL
-  function toBoundedJpeg(srcCanvas, maxEdge, q) {
-    var w = srcCanvas.width, h = srcCanvas.height;
-    var scale = Math.min(1, maxEdge / Math.max(w, h));
-    if (scale >= 1) return srcCanvas.toDataURL('image/jpeg', q);
-    var t = document.createElement('canvas');
-    t.width = Math.max(1, Math.round(w * scale));
-    t.height = Math.max(1, Math.round(h * scale));
-    t.getContext('2d').drawImage(srcCanvas, 0, 0, t.width, t.height);
-    return t.toDataURL('image/jpeg', q);
+  function orderCorners(points) {
+    var sum = points.map(function(p) { return p.x + p.y; });
+    var diff = points.map(function(p) { return p.x - p.y; });
+    return {
+      topLeftCorner: points[sum.indexOf(Math.min.apply(null, sum))],
+      topRightCorner: points[diff.indexOf(Math.max.apply(null, diff))],
+      bottomLeftCorner: points[diff.indexOf(Math.min.apply(null, diff))],
+      bottomRightCorner: points[sum.indexOf(Math.max.apply(null, sum))]
+    };
+  }
+
+  function cornerRightAngleScore(prev, current, next) {
+    var ax = prev.x - current.x, ay = prev.y - current.y;
+    var bx = next.x - current.x, by = next.y - current.y;
+    var denom = Math.hypot(ax, ay) * Math.hypot(bx, by);
+    if (!denom) return 0;
+    return Math.max(0, 1 - Math.abs((ax * bx + ay * by) / denom));
+  }
+
+  function scoreCardQuad(corners, imageWidth, imageHeight) {
+    var tl = corners.topLeftCorner, tr = corners.topRightCorner;
+    var bl = corners.bottomLeftCorner, br = corners.bottomRightCorner;
+    if (!tl || !tr || !bl || !br) return null;
+
+    var top = pointDistance(tl, tr), bottom = pointDistance(bl, br);
+    var left = pointDistance(tl, bl), right = pointDistance(tr, br);
+    var avgWidth = (top + bottom) / 2, avgHeight = (left + right) / 2;
+    if (!avgWidth || !avgHeight) return null;
+
+    var area = Math.abs(
+      tl.x * tr.y + tr.x * br.y + br.x * bl.y + bl.x * tl.y -
+      tl.y * tr.x - tr.y * br.x - br.y * bl.x - bl.y * tl.x
+    ) / 2;
+    var areaRatio = area / (imageWidth * imageHeight);
+    var aspect = avgWidth / avgHeight;
+    if (areaRatio < 0.12 || areaRatio > 0.86 || aspect < 0.45 || aspect > 1.05) return null;
+
+    var centerX = (tl.x + tr.x + bl.x + br.x) / 4;
+    var centerY = (tl.y + tr.y + bl.y + br.y) / 4;
+    var centerDistance = Math.hypot(
+      (centerX - imageWidth / 2) / (imageWidth / 2),
+      (centerY - imageHeight / 2) / (imageHeight / 2)
+    );
+    if (centerDistance > 0.48) return null;
+
+    var aspectScore = Math.max(0, 1 - Math.abs(Math.log(aspect / CARD_RATIO)) / Math.log(1.65));
+    var areaScore = Math.max(0, 1 - Math.abs(areaRatio - 0.46) / 0.36);
+    var centerScore = Math.max(0, 1 - centerDistance / 0.48);
+    var angleScore = (
+      cornerRightAngleScore(bl, tl, tr) + cornerRightAngleScore(tl, tr, br) +
+      cornerRightAngleScore(tr, br, bl) + cornerRightAngleScore(br, bl, tl)
+    ) / 4;
+    var edgeMargin = Math.min(
+      tl.x, tr.x, bl.x, br.x,
+      imageWidth - tl.x, imageWidth - tr.x, imageWidth - bl.x, imageWidth - br.x,
+      tl.y, tr.y, bl.y, br.y,
+      imageHeight - tl.y, imageHeight - tr.y, imageHeight - bl.y, imageHeight - br.y
+    ) / Math.min(imageWidth, imageHeight);
+    var edgeScore = Math.min(1, Math.max(0, edgeMargin / 0.035));
+
+    return {
+      score: aspectScore * 0.36 + areaScore * 0.24 + centerScore * 0.20 + angleScore * 0.15 + edgeScore * 0.05,
+      areaRatio: areaRatio,
+      aspect: aspect
+    };
+  }
+
+  function collectCardQuads(binary, imageWidth, imageHeight, candidates) {
+    var contours = new cv.MatVector();
+    var hierarchy = new cv.Mat();
+    cv.findContours(binary, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    for (var i = 0; i < contours.size(); i++) {
+      var contour = contours.get(i);
+      var perimeter = cv.arcLength(contour, true);
+      var approx = new cv.Mat();
+      cv.approxPolyDP(contour, approx, perimeter * 0.025, true);
+      if (approx.rows === 4 && cv.isContourConvex(approx)) {
+        var points = [];
+        for (var p = 0; p < approx.data32S.length; p += 2) {
+          points.push({ x: approx.data32S[p], y: approx.data32S[p + 1] });
+        }
+        var corners = orderCorners(points);
+        var metrics = scoreCardQuad(corners, imageWidth, imageHeight);
+        if (metrics) candidates.push({ corners: corners, metrics: metrics });
+      }
+      approx.delete();
+      contour.delete();
+    }
+    contours.delete();
+    hierarchy.delete();
+  }
+
+  function detectCardCorners(sourceCanvas) {
+    var source = cv.imread(sourceCanvas);
+    // 輪郭検出用の縮小を抑え、細い外枠を内側の絵柄と取り違えにくくする。
+    var maxEdge = 1600;
+    var scale = Math.min(1, maxEdge / Math.max(source.cols, source.rows));
+    var work = new cv.Mat();
+    cv.resize(source, work, new cv.Size(Math.round(source.cols * scale), Math.round(source.rows * scale)), 0, 0, cv.INTER_AREA);
+    source.delete();
+
+    var gray = new cv.Mat();
+    cv.cvtColor(work, gray, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+    var candidates = [];
+    var thresholds = [[35, 120], [70, 210]];
+    var kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+    thresholds.forEach(function(pair) {
+      var edges = new cv.Mat();
+      cv.Canny(gray, edges, pair[0], pair[1]);
+      cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
+      collectCardQuads(edges, work.cols, work.rows, candidates);
+      edges.delete();
+    });
+
+    kernel.delete();
+    gray.delete();
+    work.delete();
+    if (!candidates.length) return null;
+    candidates.sort(function(a, b) { return b.metrics.score - a.metrics.score; });
+    var best = candidates[0];
+    if (best.metrics.score < 0.62) return null;
+
+    var c = best.corners;
+    Object.keys(c).forEach(function(key) {
+      c[key] = { x: c[key].x / scale, y: c[key].y / scale };
+    });
+    return { corners: expandCardCorners(c, sourceCanvas.width, sourceCanvas.height), score: best.metrics.score };
+  }
+
+  function expandCardCorners(corners, sourceWidth, sourceHeight) {
+    var keys = ['topLeftCorner', 'topRightCorner', 'bottomLeftCorner', 'bottomRightCorner'];
+    var center = keys.reduce(function(acc, key) {
+      acc.x += corners[key].x / keys.length;
+      acc.y += corners[key].y / keys.length;
+      return acc;
+    }, { x: 0, y: 0 });
+    var scale = 1 + CARD_EDGE_SAFETY * 2;
+    var expanded = {};
+    keys.forEach(function(key) {
+      expanded[key] = {
+        x: Math.max(0, Math.min(sourceWidth - 1, center.x + (corners[key].x - center.x) * scale)),
+        y: Math.max(0, Math.min(sourceHeight - 1, center.y + (corners[key].y - center.y) * scale))
+      };
+    });
+    return expanded;
+  }
+
+  function warpCardCanvas(sourceCanvas, corners) {
+    var src = cv.imread(sourceCanvas);
+    var dst = new cv.Mat();
+    var srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      corners.topLeftCorner.x, corners.topLeftCorner.y,
+      corners.topRightCorner.x, corners.topRightCorner.y,
+      corners.bottomLeftCorner.x, corners.bottomLeftCorner.y,
+      corners.bottomRightCorner.x, corners.bottomRightCorner.y
+    ]);
+    var dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, CARD_WIDTH, 0, 0, CARD_HEIGHT, CARD_WIDTH, CARD_HEIGHT
+    ]);
+    var transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
+    cv.warpPerspective(src, dst, transform, new cv.Size(CARD_WIDTH, CARD_HEIGHT), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
+    var canvas = document.createElement('canvas');
+    cv.imshow(canvas, dst);
+    src.delete(); dst.delete(); srcPoints.delete(); dstPoints.delete(); transform.delete();
+    return canvas;
+  }
+
+  function guideCropCanvas(sourceCanvas) {
+    var cropHeight = Math.round(sourceCanvas.height * CARD_GUIDE_TO_FRAME * 0.99);
+    var cropWidth = Math.round(cropHeight * CARD_RATIO);
+    var sx = Math.max(0, Math.round((sourceCanvas.width - cropWidth) / 2));
+    var sy = Math.max(0, Math.round((sourceCanvas.height - cropHeight) / 2));
+    var canvas = document.createElement('canvas');
+    canvas.width = CARD_WIDTH; canvas.height = CARD_HEIGHT;
+    var ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sourceCanvas, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+    return canvas;
+  }
+
+  // RECOREの一覧で見やすいよう、角を白くマスクして5%の白余白を付ける。
+  function makeWhiteCatalogCanvas(cardCanvas) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 1400; canvas.height = 1960;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    var x = 70, y = 100, w = CARD_WIDTH, h = CARD_HEIGHT, radius = 34;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(cardCanvas, x, y, w, h);
+    ctx.restore();
+    return canvas;
+  }
+
+  // カード四隅を検出→台形補正。低信頼時はガイド枠を使い、誤検出を採用しない。
+  async function extractCardCanvas(sourceCanvas) {
+    await loadScanner();
+    var detection = detectCardCorners(sourceCanvas);
+    var card = detection ? warpCardCanvas(sourceCanvas, detection.corners) : guideCropCanvas(sourceCanvas);
+    return { canvas: makeWhiteCatalogCanvas(card), automatic: !!detection, score: detection ? detection.score : 0 };
   }
 
   // ===== 撮影 / 手入力 =====
   async function shoot() {
+    if (isShooting) return;
+    isShooting = true;
+    el('camera-box').classList.add('capture-busy');
+    el('camera-box').setAttribute('aria-disabled', 'true');
+    el('btn-shoot').disabled = true;
     el('freeze').style.display = 'none'; // 直前の凍結を解除してから撮影
     var ocrUrl;
     if (mode === 'catalog') {
@@ -486,12 +706,15 @@
       var outer = captureFrameCanvas(el('scan-frame'), 0.05) || fullFrameCanvas();
       showLoading('カード検出中...');
       try {
-        var card = await extractCardCanvas(outer);
-        lastCardImage = card.toDataURL('image/jpeg', 0.92);
+        var extraction = await extractCardCanvas(outer);
+        lastCardImage = extraction.canvas.toDataURL('image/jpeg', 0.98);
+        if (!extraction.automatic) {
+          showToast('輪郭が不鮮明なため、ガイド枠で切り出しました', '');
+        }
       } catch (e) {
-        // 検出失敗 → 内枠クロップにフォールバック（登録は継続）
-        lastCardImage = canvasToUrl(captureFrameCanvas(el('card-guide'), 0.02) || outer);
-        showToast('カード枠を自動検出できず、枠クロップで代用します', '');
+        // OpenCV自体が失敗しても、ガイド枠から白背景画像を作って登録は継続する。
+        lastCardImage = makeWhiteCatalogCanvas(guideCropCanvas(outer)).toDataURL('image/jpeg', 0.98);
+        showToast('自動補正を使えなかったため、ガイド枠で切り出しました', '');
       }
       hideLoading();
       el('freeze').src = lastCardImage; // 切り出したカードをプレビュー
@@ -535,7 +758,13 @@
       return searchCatalog(codes);
     }).catch(function(e) {
       showToast('エラー: ' + e.message, 'error');
-    }).then(function() { hideLoading(); });
+    }).then(function() {
+      hideLoading();
+      isShooting = false;
+      el('camera-box').classList.remove('capture-busy');
+      el('camera-box').setAttribute('aria-disabled', 'false');
+      el('btn-shoot').disabled = false;
+    });
   }
 
   function manualSearch() {
@@ -759,7 +988,7 @@
     wrap.innerHTML = '<div class="emoji">🗂</div>マスタ未登録 — 新規登録します';
 
     var photoNote = (lastCardImage)
-      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 切り出したカード画像を添付</label>'
+      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 白背景に整えたカード画像を添付</label>'
       : '<div class="reg-check">（手入力のため添付画像なし）</div>';
 
     var form = document.createElement('div');
@@ -819,7 +1048,7 @@
     return Array.isArray(r) ? r : [];
   }
 
-  // ===== 画像: 背景除去 → RECORE アップロード → 公開URL =====
+  // ===== 画像: 白背景カード画像 → RECORE アップロード → 公開URL =====
   function b64ToBlob(b64, mime) {
     var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
     for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
@@ -1035,6 +1264,13 @@
     })(modeCards[i]);
   }
   el('btn-shoot').addEventListener('click', shoot);
+  el('camera-box').addEventListener('click', shoot);
+  el('camera-box').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      shoot();
+    }
+  });
   el('btn-manual').addEventListener('click', manualSearch);
   el('manual-mpn').addEventListener('keydown', function(e) { if (e.key === 'Enter') manualSearch(); });
   el('btn-finish').addEventListener('click', onFinish);
