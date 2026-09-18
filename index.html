@@ -44,7 +44,9 @@
   .btn-finish { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 20px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; }
   .btn-finish:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--text2); color: var(--text2); }
   .camera-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-  .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); }
+  .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .camera-box:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .camera-box.capture-busy { cursor: wait; }
   .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
   #freeze { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 3; background: #000; }
@@ -54,6 +56,7 @@
   .card-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); height: 56%; aspect-ratio: 63/88; border: 2px dashed rgba(255,255,255,0.75); border-radius: 6px; display: none; } /* 内枠=カードを合わせる位置 */
   .card-guide.show { display: block; }
   .card-guide::after { content: 'カードをここに'; position: absolute; top: -22px; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(255,255,255,0.7); }
+  .capture-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 5; pointer-events: none; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,0.65); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; backdrop-filter: blur(4px); }
   #canvas { display: none; }
   .btn-shoot { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); font-weight: 700; font-size: 16px; padding: 16px; border-radius: 14px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .manual-input-row { display: flex; gap: 8px; }
@@ -170,10 +173,11 @@
     <button class="btn-finish" id="btn-finish" disabled>完了 →</button>
   </div>
   <div class="camera-section">
-    <div class="camera-box" id="camera-box">
+    <div class="camera-box" id="camera-box" role="button" tabindex="0" aria-label="カメラ映像をタップして撮影">
       <video id="video" autoplay playsinline muted></video>
       <div class="camera-overlay"><div class="scan-frame" id="scan-frame"></div><div class="card-guide" id="card-guide"></div></div>
       <img id="freeze" alt="">
+      <div class="capture-hint">画面をタップして撮影</div>
     </div>
     <canvas id="canvas"></canvas>
     <button class="btn-shoot" id="btn-shoot"><span>📸</span> カードを撮影する</button>
@@ -252,6 +256,7 @@
   var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
   var lastCardImage = null;      // カタログ登録: 白背景に整えたカード画像(data URL)
   var scannerPromise = null;     // OpenCV.js のロード
+  var isShooting = false;        // 映像タップと下部ボタンの二重発火を防ぐ
 
   function el(id) { return document.getElementById(id); }
   function getApiKey() { return el('api-key').value.trim(); }
@@ -687,6 +692,11 @@
 
   // ===== 撮影 / 手入力 =====
   async function shoot() {
+    if (isShooting) return;
+    isShooting = true;
+    el('camera-box').classList.add('capture-busy');
+    el('camera-box').setAttribute('aria-disabled', 'true');
+    el('btn-shoot').disabled = true;
     el('freeze').style.display = 'none'; // 直前の凍結を解除してから撮影
     var ocrUrl;
     if (mode === 'catalog') {
@@ -748,7 +758,13 @@
       return searchCatalog(codes);
     }).catch(function(e) {
       showToast('エラー: ' + e.message, 'error');
-    }).then(function() { hideLoading(); });
+    }).then(function() {
+      hideLoading();
+      isShooting = false;
+      el('camera-box').classList.remove('capture-busy');
+      el('camera-box').setAttribute('aria-disabled', 'false');
+      el('btn-shoot').disabled = false;
+    });
   }
 
   function manualSearch() {
@@ -1248,6 +1264,13 @@
     })(modeCards[i]);
   }
   el('btn-shoot').addEventListener('click', shoot);
+  el('camera-box').addEventListener('click', shoot);
+  el('camera-box').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      shoot();
+    }
+  });
   el('btn-manual').addEventListener('click', manualSearch);
   el('manual-mpn').addEventListener('keydown', function(e) { if (e.key === 'Enter') manualSearch(); });
   el('btn-finish').addEventListener('click', onFinish);
