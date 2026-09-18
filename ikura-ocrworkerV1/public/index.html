@@ -316,12 +316,12 @@
   var defaultCategoryId = null;  // カタログ登録: 直近入力を記憶してプリフィル
   var selectedCardTitle = 'ポケモンカード';
   var stream = null;
-  var selectedProducts = [];     // bas/big=ケース対象 / catalog=登録済み一覧
+  var selectedProducts = [];     // bas/big=ケース対象 / catalog=一括登録待ちキュー
   var toastTimer = null;
   var lastPrimaryCode = '';      // 直近の検索コード(mpn候補)
   var lastExtract = { title: '' };// カタログ登録: フルOCRの抽出結果
   var verifiedCategoryId = null; // 照合済みの候補ID(開始押下でdefaultCategoryIdに確定)
-  var lastCardImage = null;      // カタログ登録: 白背景に整えたカード画像(data URL)
+  var lastCardImage = null;      // カタログ登録: 剛体回転＋内側クロップ済み画像(data URL)
   var scannerPromise = null;     // OpenCV.js のロード
   var isShooting = false;        // 映像タップと下部ボタンの二重発火を防ぐ
 
@@ -582,8 +582,9 @@
     el('scan-panel').style.display = 'block';
     el('btn-modeback').style.display = '';
     el('mode-badge').textContent = modeLabel(m);
-    el('counter-label').textContent = (m === 'catalog') ? '登録済み' : '選択済み';
-    el('selected-title').textContent = (m === 'catalog') ? '登録済み ✓' : '選択済み ✓';
+    el('counter-label').textContent = (m === 'catalog') ? '登録待ち' : '選択済み';
+    el('selected-title').textContent = (m === 'catalog') ? '登録待ちキュー' : '選択済み ✓';
+    el('btn-finish').textContent = (m === 'catalog') ? '一括登録 →' : '完了 →';
     el('suggest-title').textContent = (m === 'catalog') ? 'カタログ照合' : 'カタログ候補';
     // カタログ登録モードのみ: カメラ枠を縦(トレカ実寸)にし、型番検索欄を隠す
     var portrait = (m === 'catalog');
@@ -694,9 +695,9 @@
   var CARD_WIDTH = 1260;
   var CARD_HEIGHT = 1760;
   var CARD_GUIDE_TO_FRAME = 56 / 82;
-  // 検出外周の外側は取らない。枠切れ防止は出力側の極小白余白で行う。
+  // 検出外周の外側は取らず、さらに内側へ少量クロップして机の混入を防ぐ。
   var CARD_EDGE_SAFETY = 0;
-  var CARD_OUTPUT_INSET = 0.004;
+  var CARD_INNER_CROP = 0.004;
 
   function applyCardPreset(title) {
     var size = CARD_PRESETS[title] || [63, 88];
@@ -975,29 +976,65 @@
     return expanded;
   }
 
+  function normalizeLineAngle(angle) {
+    while (angle > 90) angle -= 180;
+    while (angle < -90) angle += 180;
+    return angle;
+  }
+
+  // 絵柄の参照や射影変形はしない。外形テンプレートに対し、回転・内側クロップ・一様拡縮だけを行う。
   function warpCardCanvas(sourceCanvas, corners) {
-    var src = cv.imread(sourceCanvas);
-    var dst = new cv.Mat();
-    var srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      corners.topLeftCorner.x, corners.topLeftCorner.y,
-      corners.topRightCorner.x, corners.topRightCorner.y,
-      corners.bottomLeftCorner.x, corners.bottomLeftCorner.y,
-      corners.bottomRightCorner.x, corners.bottomRightCorner.y
-    ]);
-    var insetX = Math.max(3, Math.round(CARD_WIDTH * CARD_OUTPUT_INSET));
-    var insetY = Math.max(3, Math.round(CARD_HEIGHT * CARD_OUTPUT_INSET));
-    var dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      insetX, insetY, CARD_WIDTH - insetX, insetY,
-      insetX, CARD_HEIGHT - insetY, CARD_WIDTH - insetX, CARD_HEIGHT - insetY
-    ]);
-    var transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
-    cv.warpPerspective(
-      src, dst, transform, new cv.Size(CARD_WIDTH, CARD_HEIGHT),
-      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255)
-    );
+    var tl = corners.topLeftCorner, tr = corners.topRightCorner;
+    var bl = corners.bottomLeftCorner, br = corners.bottomRightCorner;
+    var topAngle = normalizeLineAngle(Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI);
+    var bottomAngle = normalizeLineAngle(Math.atan2(br.y - bl.y, br.x - bl.x) * 180 / Math.PI);
+    var leftAngle = normalizeLineAngle(Math.atan2(bl.y - tl.y, bl.x - tl.x) * 180 / Math.PI - 90);
+    var rightAngle = normalizeLineAngle(Math.atan2(br.y - tr.y, br.x - tr.x) * 180 / Math.PI - 90);
+    var rotation = -(topAngle + bottomAngle + leftAngle + rightAngle) / 4;
+    var radians = rotation * Math.PI / 180;
+    var center = {
+      x: (tl.x + tr.x + bl.x + br.x) / 4,
+      y: (tl.y + tr.y + bl.y + br.y) / 4
+    };
+    var rotated = document.createElement('canvas');
+    rotated.width = sourceCanvas.width;
+    rotated.height = sourceCanvas.height;
+    var rctx = rotated.getContext('2d');
+    rctx.imageSmoothingEnabled = true;
+    rctx.imageSmoothingQuality = 'high';
+    rctx.translate(center.x, center.y);
+    rctx.rotate(radians);
+    rctx.drawImage(sourceCanvas, -center.x, -center.y);
+
+    function rotatePoint(p) {
+      var dx = p.x - center.x, dy = p.y - center.y;
+      return {
+        x: center.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+        y: center.y + dx * Math.sin(radians) + dy * Math.cos(radians)
+      };
+    }
+    var rtl = rotatePoint(tl), rtr = rotatePoint(tr), rbl = rotatePoint(bl), rbr = rotatePoint(br);
+    // 斜視が残る場合も、4辺すべての内側に収まる最大の軸平行矩形だけを使う。
+    var left = Math.max(rtl.x, rbl.x);
+    var right = Math.min(rtr.x, rbr.x);
+    var top = Math.max(rtl.y, rtr.y);
+    var bottom = Math.min(rbl.y, rbr.y);
+    var trim = Math.max(2, Math.min(right - left, bottom - top) * CARD_INNER_CROP);
+    left += trim; right -= trim; top += trim; bottom -= trim;
+    var availableWidth = Math.max(1, right - left);
+    var availableHeight = Math.max(1, bottom - top);
+    var cropWidth = availableWidth, cropHeight = availableHeight;
+    if (cropWidth / cropHeight > CARD_RATIO) cropWidth = cropHeight * CARD_RATIO;
+    else cropHeight = cropWidth / CARD_RATIO;
+    var sx = left + (availableWidth - cropWidth) / 2;
+    var sy = top + (availableHeight - cropHeight) / 2;
+
     var canvas = document.createElement('canvas');
-    cv.imshow(canvas, dst);
-    src.delete(); dst.delete(); srcPoints.delete(); dstPoints.delete(); transform.delete();
+    canvas.width = CARD_WIDTH; canvas.height = CARD_HEIGHT;
+    var ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(rotated, sx, sy, cropWidth, cropHeight, 0, 0, CARD_WIDTH, CARD_HEIGHT);
     return canvas;
   }
 
@@ -1015,32 +1052,12 @@
     return canvas;
   }
 
-  // RECOREの一覧で見やすいよう、角を白くマスクして5%の白余白を付ける。
+  // 外周に白余白を足さない。検出したカード画素だけをそのまま返す。
   function makeWhiteCatalogCanvas(cardCanvas) {
-    var canvas = document.createElement('canvas');
-    canvas.width = 1400; canvas.height = 1960;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    var x = Math.round((canvas.width - CARD_WIDTH) / 2), y = 100;
-    var w = CARD_WIDTH, h = CARD_HEIGHT, radius = Math.round(34 * CARD_WIDTH / 1260);
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + w, y, x + w, y + h, radius);
-    ctx.arcTo(x + w, y + h, x, y + h, radius);
-    ctx.arcTo(x, y + h, x, y, radius);
-    ctx.arcTo(x, y, x + w, y, radius);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(cardCanvas, x, y, w, h);
-    ctx.restore();
-    return canvas;
+    return cardCanvas;
   }
 
-  // カード四隅を一回で検出→台形補正。Safariのメモリを圧迫する二段検出はしない。
+  // カード四隅を一回で検出→剛体回転と内側クロップ。画素を引き伸ばす台形補正はしない。
   async function extractCardCanvas(sourceCanvas) {
     await loadScanner();
     var detection = detectCardCorners(sourceCanvas);
@@ -1351,7 +1368,7 @@
     wrap.innerHTML = '<div class="emoji">🗂</div>マスタ未登録 — 新規登録します';
 
     var photoNote = (lastCardImage)
-      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 白背景に整えたカード画像を添付</label>'
+      ? '<label class="reg-check"><input type="checkbox" id="reg-photo" checked> 外周を切り出したカード画像を添付</label>'
       : '<div class="reg-check">（手入力のため添付画像なし）</div>';
 
     var form = document.createElement('div');
@@ -1367,7 +1384,7 @@
       '<div><div class="field-label">弾名（任意）</div>' +
         '<input type="text" id="reg-expansion" placeholder="例: 黒炎の支配者"></div>' +
       photoNote +
-      '<button class="btn-reg" id="reg-submit">マスタ登録する</button>';
+      '<button class="btn-reg" id="reg-submit">登録待ちに追加</button>';
 
     var actions = document.createElement('div');
     actions.className = 'no-result-actions';
@@ -1389,7 +1406,7 @@
       var cat = defaultCategoryId; // セッション固定カテゴリ
       var mpn = form.querySelector('#reg-mpn').value.trim();
       var usePhoto = !!(form.querySelector('#reg-photo') && form.querySelector('#reg-photo').checked);
-      registerCatalog({
+      queueCatalog({
         title: title,
         mpn: mpn,
         categoryId: cat,
@@ -1400,7 +1417,7 @@
     };
   }
 
-  // pa_mpn で既存検索（重複ガード / 登録後確認に共用）
+  // pa_mpn で既存検索
   async function findByMpn(code) {
     if (!code) return [];
     var res = await apiFetch('/recore/products?pa_mpn=' + encodeURIComponent(code) + '&limit=10');
@@ -1409,7 +1426,7 @@
     return Array.isArray(r) ? r : [];
   }
 
-  // ===== 画像: 白背景カード画像 → RECORE アップロード → 公開URL =====
+  // ===== 画像: 切り出し済みカード画像 → RECORE アップロード → 公開URL =====
   function b64ToBlob(b64, mime) {
     var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
     for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
@@ -1437,65 +1454,104 @@
     return info.url.split('?')[0];
   }
 
-  // ===== カタログ新規登録 (POST /products) =====
-  async function registerCatalog(f, btn) {
-    if (btn) btn.disabled = true; // 二重送信ガード
-    showLoading('重複チェック中...');
+  // ===== カタログ連続登録: 端末キューへ追加し、最後に一括送信 =====
+  function queueCatalog(f, btn) {
+    if (selectedProducts.length >= 20) {
+      showToast('一括登録は20件までです。先に送信してください', 'error');
+      return;
+    }
+    if (f.mpn && selectedProducts.some(function(item) { return item.mpn === f.mpn; })) {
+      showToast('同じ型番が登録待ちにあります', 'error');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    selectedProducts.push({
+      queueId: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + selectedProducts.length),
+      queued: true,
+      title: f.title,
+      code: f.mpn || '型番なし',
+      mpn: f.mpn,
+      categoryId: f.categoryId,
+      rarity: f.rarity,
+      expansion: f.expansion,
+      imageData: f.usePhoto ? lastCardImage : null
+    });
+    updateList();
+    resetResultView();
+    showToast('登録待ちに追加しました ✓ 次のカードへ', 'success');
+  }
+
+  async function mapWithConcurrency(items, limit, mapper) {
+    var results = new Array(items.length), cursor = 0;
+    async function worker() {
+      while (cursor < items.length) {
+        var index = cursor++;
+        results[index] = await mapper(items[index], index);
+      }
+    }
+    var workers = [];
+    for (var i = 0; i < Math.min(limit, items.length); i++) workers.push(worker());
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function submitCatalogBulk() {
+    var batch = selectedProducts.slice();
+    if (!batch.length) { showToast('登録待ちがありません', 'error'); return; }
+    el('btn-finish').disabled = true;
+    var uploaded = 0;
+    showLoading('画像アップロード 0/' + batch.length);
     try {
-      // 1) 重複ガード
-      if (f.mpn) {
-        var existing = await findByMpn(f.mpn);
-        if (existing.length) {
-          var e0 = existing[0];
-          addToSelection(e0.id, e0.title || f.title, e0.code || '(既存)', null, null);
-          showToast('既に存在したため選択に追加しました', 'success');
-          resetResultView();
-          return;
+      var prepared = await mapWithConcurrency(batch, 3, async function(item) {
+        try {
+          var imageUrls = [];
+          if (item.imageData) imageUrls.push(await uploadImageToRecore(item.imageData));
+          uploaded++;
+          showLoading('画像アップロード ' + uploaded + '/' + batch.length);
+          return {
+            clientId: item.queueId,
+            title: item.title,
+            mpn: item.mpn,
+            categoryId: item.categoryId,
+            rarity: item.rarity,
+            expansion: item.expansion,
+            imageUrls: imageUrls
+          };
+        } catch (error) {
+          return { clientId: item.queueId, uploadError: error.message };
         }
-      }
-      // 2) 画像（任意）: 撮影時に切り出し済みのカード画像を直接アップロード
-      var imageUrls = [];
-      if (f.usePhoto && lastCardImage) {
-        showLoading('画像アップロード中...');
-        imageUrls.push(await uploadImageToRecore(lastCardImage));
-      }
-      // 3) 登録
-      var attribute = {};
-      if (f.mpn) attribute.mpn = f.mpn;
-      if (f.rarity) attribute.custom_rarity = f.rarity;
-      if (f.expansion) attribute.custom_expansion_name = f.expansion;
-      var body = { title: f.title, attribute: attribute, category_id: f.categoryId };
-      if (imageUrls.length) body.image_urls = imageUrls;
-
-      showLoading('カタログ登録中...');
-      var res = await apiFetch('/recore/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
       });
-      if (!res.ok) { throw new Error('登録 ' + res.status + ': ' + (await res.text())); }
-      var created = await res.json();
-
-      // 4) 登録後に再検索で確認
-      var canonical = created, searchable = false;
-      if (f.mpn) {
-        showLoading('検索ヒット確認中...');
-        var found = await findByMpn(f.mpn);
-        var hit = found.filter(function(x) { return x.id === created.id; });
-        if (hit.length) { canonical = hit[0]; searchable = true; }
+      var ready = prepared.filter(function(item) { return !item.uploadError; });
+      var failedIds = prepared.filter(function(item) { return item.uploadError; })
+        .map(function(item) { return item.clientId; });
+      var created = 0, existing = 0;
+      if (ready.length) {
+        showLoading('RECOREへ一括登録中...');
+        var res = await apiFetch('/catalog/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: ready })
+        });
+        if (!res.ok) throw new Error('一括登録 ' + res.status + ': ' + (await res.text()));
+        var data = await res.json();
+        (data.results || []).forEach(function(result) {
+          if (result.status === 'created') created++;
+          else if (result.status === 'existing') existing++;
+          else failedIds.push(result.clientId);
+        });
       }
-      addToSelection(canonical.id, canonical.title || f.title, canonical.code || '(新規)', null, null);
-      resetResultView();
-      if (f.mpn && !searchable) {
-        showToast('登録OK。ただしpa_mpn検索に出ませんでした→カテゴリ属性設定を要確認', 'error');
+      selectedProducts = batch.filter(function(item) { return failedIds.indexOf(item.queueId) >= 0; });
+      updateList();
+      hideLoading();
+      if (!selectedProducts.length) {
+        showDone(created + '件を新規登録' + (existing ? '、' + existing + '件は登録済み' : ''), null);
       } else {
-        showToast('マスタ登録＆リスト追加しました ✓', 'success');
+        showToast((created + existing) + '件成功、' + selectedProducts.length + '件失敗。失敗分をキューに残しました', 'error');
       }
     } catch (e) {
-      showToast('登録失敗: ' + e.message, 'error');
-    } finally {
-      if (btn) btn.disabled = false;
       hideLoading();
+      updateList();
+      showToast('一括登録失敗: ' + e.message, 'error');
     }
   }
 
@@ -1506,7 +1562,7 @@
     el('btn-finish').disabled = count === 0;
     el('selected-list').style.display = count > 0 ? 'block' : 'none';
     el('selected-items-container').innerHTML = selectedProducts.map(function(p, i) {
-      var priceLabel = (p.buy != null) ? '買 ' + yen(p.buy) : '';
+      var priceLabel = p.queued ? '待機' : ((p.buy != null) ? '買 ' + yen(p.buy) : '');
       return '<div class="selected-item">' +
         '<span class="check">✓</span>' +
         '<span class="name">' + (p.title || p.code).substring(0, 24) + '</span>' +
@@ -1529,7 +1585,7 @@
   function onFinish() {
     if (!selectedProducts.length) { showToast('リストが空です', 'error'); return; }
     if (mode === 'catalog') {
-      showDone(selectedProducts.length + '件をマスタ登録しました', null);
+      submitCatalogBulk();
     } else {
       showConfirm();
     }

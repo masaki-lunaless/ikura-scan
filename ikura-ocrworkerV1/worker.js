@@ -61,6 +61,9 @@ export default {
       }
       if (path === "/admin/staff" && request.method === "GET") return await listStaff(request, env, session);
       if (path === "/admin/staff" && request.method === "POST") return await createStaff(request, env, session);
+      if (path === "/catalog/bulk" && request.method === "POST") {
+        return await registerCatalogBulk(request, env, session);
+      }
       if (path.startsWith("/recore/")) {
         return await proxyRecore(request, env, session, path.slice("/recore".length));
       }
@@ -370,6 +373,111 @@ async function proxyRecore(request, env, session, upstreamPath) {
   const responseType = response.headers.get("Content-Type");
   if (responseType) responseHeaders.set("Content-Type", responseType);
   return new Response(response.body, { status: response.status, headers: responseHeaders });
+}
+
+async function registerCatalogBulk(request, env, session) {
+  if (!env.API_KEY_ENCRYPTION_KEY) {
+    return json(request, env, { error: "Encryption key is not configured" }, 503);
+  }
+  if (!session.credentials_ciphertext || !session.credentials_iv || !session.recore_store_id) {
+    return json(request, env, { error: "Connection setup required" }, 409);
+  }
+  const payload = await readJson(request);
+  if (!payload || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 20) {
+    return json(request, env, { error: "items must contain 1 to 20 entries" }, 400);
+  }
+  const apiKey = await decryptSecret(
+    session.credentials_ciphertext, session.credentials_iv, env.API_KEY_ENCRYPTION_KEY
+  );
+  const results = await mapWithConcurrency(payload.items, 3, async (raw, index) => {
+    const clientId = cleanText(raw && raw.clientId, 80) || String(index);
+    try {
+      const item = normalizeCatalogItem(raw);
+      if (item.mpn) {
+        const existing = await recoreJsonRequest(
+          apiKey, session.recore_store_id,
+          `/products?pa_mpn=${encodeURIComponent(item.mpn)}&limit=10`, "GET"
+        );
+        if (Array.isArray(existing) && existing.length) {
+          return { clientId, status: "existing", product: existing[0] };
+        }
+      }
+      const attribute = {};
+      if (item.mpn) attribute.mpn = item.mpn;
+      if (item.rarity) attribute.custom_rarity = item.rarity;
+      if (item.expansion) attribute.custom_expansion_name = item.expansion;
+      const body = { title: item.title, category_id: item.categoryId, attribute };
+      if (item.imageUrls.length) body.image_urls = item.imageUrls;
+      const product = await recoreJsonRequest(
+        apiKey, session.recore_store_id, "/products", "POST", body
+      );
+      return { clientId, status: "created", product };
+    } catch (error) {
+      return {
+        clientId,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Registration failed",
+      };
+    }
+  });
+  const summary = results.reduce((counts, result) => {
+    counts[result.status] = (counts[result.status] || 0) + 1;
+    return counts;
+  }, { created: 0, existing: 0, failed: 0 });
+  return json(request, env, { results, summary });
+}
+
+function normalizeCatalogItem(raw) {
+  if (!raw || typeof raw !== "object") throw new Error("Invalid item");
+  const title = cleanText(raw.title, 200);
+  const categoryId = Number(raw.categoryId);
+  if (!title) throw new Error("title is required");
+  if (!Number.isSafeInteger(categoryId) || categoryId < 1) throw new Error("categoryId is invalid");
+  const imageUrls = Array.isArray(raw.imageUrls)
+    ? raw.imageUrls.slice(0, 3).map((value) => cleanText(value, 2000)).filter((value) => {
+        try { return new URL(value).protocol === "https:"; }
+        catch { return false; }
+      })
+    : [];
+  return {
+    title,
+    categoryId,
+    mpn: cleanText(raw.mpn, 100),
+    rarity: cleanText(raw.rarity, 100),
+    expansion: cleanText(raw.expansion, 200),
+    imageUrls,
+  };
+}
+
+async function recoreJsonRequest(apiKey, storeId, path, method, body) {
+  const response = await fetch(new URL(path, RECORE_API_URL), {
+    method,
+    headers: {
+      Authorization: apiKey,
+      "X-Store-Id": String(storeId),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    redirect: "manual",
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`RECORE ${method} failed (${response.status})`);
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch { throw new Error(`RECORE ${method} returned invalid JSON`); }
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
 }
 
 async function handleOcr(request, env) {

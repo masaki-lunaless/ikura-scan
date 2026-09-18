@@ -19,7 +19,8 @@
 ```text
 iPhone / browser
   ├─ UI and camera capture (single-page index.html)
-  ├─ OpenCV.js: one-pass edge detection, perspective correction, deskew
+  ├─ OpenCV.js: one-pass edge detection, rigid rotation, inner crop
+  ├─ catalog registration queue (up to 20 items)
   └─ direct PUT to a RECORE-issued signed upload URL
             │ authenticated same-origin API
             ▼
@@ -28,6 +29,7 @@ Cloudflare Worker
   ├─ staff authentication and session management
   ├─ Anthropic OCR proxy
   ├─ RECORE allowlisted API proxy
+  ├─ bounded-concurrency catalog bulk endpoint
   └─ Cloudflare D1
        ├─ tenants / stores / staff
        ├─ encrypted RECORE connection metadata
@@ -75,8 +77,11 @@ RECORE画像用の処理順:
 6. 面積の小さい内部柄を除外し、複数の輪郭簡略化率で凸四角形を抽出
 7. 比率、面積、中央位置、直角度、対辺の平行度、回転角、端の余裕を採点
 8. 四角形が閉じない場合は、輪郭を包む最小回転矩形を保険に使う
-9. 選択した四隅を一回のperspective warpで水平化
-10. 1400 x 1960 pxの白背景へ配置し、JPEG quality 0.98で保持
+9. 4辺の平均角度から画像全体を剛体回転
+10. 回転後の四角形の全辺より内側に収まる63:88または59:86の矩形をクロップ
+11. 一様拡縮だけで規格サイズへ出力し、JPEG quality 0.98で保持
+
+外形のリファレンスはカード規格比率だけです。カード絵柄を参照した補完、生成、非一様な引き伸ばし、perspective warpは禁止です。斜視撮影を完全な長方形へ変形せず、カード内側を少しクロップすることで机の混入を避けます。外周の白余白も追加しません。
 
 iPhone SafariでOpenCVの全検出を二周させないでください。2026-09-18に二段再検出を試したところ、例外後に全画像が固定クロップへ落ち、傾きと机が残る回帰を起こしたため撤回しました。
 
@@ -108,7 +113,7 @@ iPhone SafariでOpenCVの全検出を二周させないでください。2026-09
 - ワンピース: 外周は取れても約1°の傾きが残るケース。内側のデザイン枠より、面積が期待値に近い物理外周を優先する
 - ガンダムアーセナルベース: 固定クロップで木目の机が残るケース。±3°超の四角形または最小回転矩形を同じ検出内の再補正候補として救う
 - ホロカード: カード端と撮影台のコントラストが低いケース。低閾値Canny候補を維持する
-- 丸角: 白背景マスクでカード角を切り落とし過ぎない
+- 丸角: 机を含めないことを優先し、白い外周や生成マスクを追加しない
 
 ## OCRエンジン
 
@@ -122,7 +127,7 @@ OCRはCloudflare WorkerからAnthropic Messages APIへ送ります。
 
 現在のプロンプトと後処理は`123/456`形式の数字型番中心です。`OP12-007`のような英字混じり型番への対応は未実装です。関連Issue: [#6](https://github.com/masaki-lunaless/ikura-scan/issues/6)
 
-OCR用画像とRECORE保存画像は別です。ClaudeにはOCR向けクロップを送り、RECOREにはOpenCVで補正した白背景画像を送ります。
+OCR用画像とRECORE保存画像は別です。ClaudeにはOCR向けクロップを送り、RECOREにはOpenCVで検出して剛体回転・内側クロップした画像を送ります。
 
 ## 認証と秘密情報
 
@@ -158,11 +163,15 @@ category ID validation
   -> capture
   -> OCR
   -> duplicate search by pa_mpn
-  -> request signed public upload URL from RECORE
-  -> browser PUTs image directly to signed URL
-  -> POST /products
-  -> search again by pa_mpn and verify registration
+  -> add item to the browser-side registration queue
+  -> continue capture (up to 20 items)
+  -> one final user action starts bulk submission
+  -> browser requests signed public upload URLs and PUTs images with concurrency 3
+  -> POST /catalog/bulk once
+  -> Worker duplicate-checks and POSTs /products with concurrency 3
 ```
+
+RECOREの公開された正式バルク商品登録endpointは確認できないため、`/catalog/bulk`はアプリ独自の一括受付です。店舗スタッフの操作とブラウザからWorkerへの登録要求は一回ですが、WorkerからRECOREへは商品ごとの重複確認と登録を制限並列で行います。個別失敗は他商品を止めず、失敗分だけブラウザのキューに残します。
 
 画像はCloudflareへ保存しません。RECOREが発行した署名URLへブラウザから直接アップロードします。
 
