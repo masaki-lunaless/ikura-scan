@@ -1,17 +1,24 @@
 name = "ikura-ocr-proxy"
 main = "worker.js"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-09-18"
+compatibility_flags = ["nodejs_compat"]
 
 # フロントエンドの正確なOrigin。複数はカンマ区切り。
 [vars]
-ALLOWED_ORIGINS = "https://REPLACE_WITH_FRONTEND_ORIGIN"
+ALLOWED_ORIGINS = "https://ikura-ocr-proxy.lunaless.workers.dev"
 
-# `wrangler d1 create ikura-auth` の結果でコメントを外してdatabase_idを埋める。
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "ikura-auth"
-# database_id = "REPLACE_WITH_D1_DATABASE_ID"
-# migrations_dir = "migrations"
+[[d1_databases]]
+binding = "DB"
+database_name = "ikura-auth"
+database_id = "7207b863-6714-40cd-9074-b6b5e13947bf"
+migrations_dir = "migrations"
+
+[assets]
+directory = "public"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 # APIキー類はコードに書かず、wrangler secret で登録する:
 #   npx wrangler secret put CLAUDE_API_KEY
