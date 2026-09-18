@@ -50,9 +50,9 @@
   .camera-box { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 16px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
   .camera-box:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
   .camera-box.capture-busy { cursor: wait; }
-  .camera-box.portrait { aspect-ratio: 3/4; max-height: 60vh; margin: 0 auto; }
+  .camera-box.portrait { aspect-ratio: var(--card-aspect, 63/88); margin: 0 auto; }
   #video { width: 100%; height: 100%; object-fit: cover; }
-  #freeze { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 3; background: #000; }
+  #freeze { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; z-index: 3; background: #000; }
   .camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
   .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 70%; aspect-ratio: 1.6; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.45); }
   .scan-frame.portrait { width: auto; height: 82%; aspect-ratio: 63/88; } /* 外枠=撮影範囲(背景込み) */
@@ -749,6 +749,7 @@
     CARD_RATIO = size[0] / size[1];
     CARD_WIDTH = Math.round(CARD_HEIGHT * CARD_RATIO);
     var ratio = size[0] + ' / ' + size[1];
+    el('camera-box').style.setProperty('--card-aspect', ratio);
     el('scan-frame').style.aspectRatio = ratio;
     el('card-guide').style.aspectRatio = ratio;
   }
