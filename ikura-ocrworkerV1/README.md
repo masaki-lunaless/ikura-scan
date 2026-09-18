@@ -7,7 +7,8 @@ Cloudflare Worker + D1で、いーくらのスタッフ認証、OCR、RECORE API
 
 - PINはスタッフごとのsalt付きPBKDF2-SHA256ハッシュで保存
 - セッションは8時間。ランダムトークン本体はHttpOnly Cookie、D1にはSHA-256ハッシュのみ保存
-- RECORE APIキーはAES-256-GCMで暗号化してD1に保存
+- RECORE APIキーは初回ログイン後の接続設定画面から受け取り、AES-256-GCMで暗号化してD1に保存
+- 保存済みAPIキーはブラウザへ返さず、再編集画面でも入力欄は常に空欄
 - ログイン失敗は会社・スタッフ・IP単位で制限（10分内に5回失敗すると15分停止）
 - RECORE中継はアプリが利用するパスとHTTPメソッドだけを許可
 - CORSは`ALLOWED_ORIGINS`に指定した正確なOriginだけを許可
@@ -48,7 +49,7 @@ openssl rand -base64 32
 npx wrangler deploy
 ```
 
-初回だけ、管理者端末から次のAPIを呼びます。`recoreApiKey`はWorker内で暗号化され、レスポンスやブラウザには返りません。
+初回だけ、管理者端末から次のAPIを呼び、会社と最初の管理者を作成します。この段階ではRECORE情報を登録しません。
 
 ```bash
 curl -X POST 'https://ikura-ocr-proxy.example.workers.dev/admin/bootstrap' \
@@ -57,9 +58,6 @@ curl -X POST 'https://ikura-ocr-proxy.example.workers.dev/admin/bootstrap' \
   --data '{
     "companyCode": "IKURA",
     "companyName": "いーくら",
-    "storeName": "本店",
-    "recoreStoreId": "1",
-    "recoreApiKey": "YOUR_RECORE_API_KEY",
     "staffCode": "ADMIN",
     "staffName": "管理者",
     "pin": "123456"
@@ -68,6 +66,9 @@ curl -X POST 'https://ikura-ocr-proxy.example.workers.dev/admin/bootstrap' \
 
 PINは4〜8桁の数字です。会社コードとスタッフコードは英数字・`_`・`-`の2〜32文字です。
 登録後は`BOOTSTRAP_SECRET`をローテーションするか削除してください。すでに存在する会社コードは再登録できません。
+
+管理者がWeb画面へ初回ログインすると、自動的に接続設定画面へ移動します。そこでRECOREの店舗名・店舗ID・APIキーを保存すると、スキャン画面が使えるようになります。
+保存時だけAPIキーをWorkerへ送り、暗号化してD1へ格納します。設定画面を再度開いても既存のAPIキーは返さず、変更するときだけ新しい値を入力します。
 
 ## スタッフ追加
 
@@ -104,6 +105,8 @@ npx wrangler dev
 - `POST /ocr` — ログイン必須のカードOCR
 - `/recore/*` — ログイン必須、許可リスト方式のRECORE中継
 - `POST /admin/bootstrap` — Secret必須の初期登録
+- `GET /admin/connection` — 管理者専用。接続状態と店舗情報のみ返す（APIキーは返さない）
+- `PUT /admin/connection` — 管理者専用。RECORE接続を暗号化保存・更新
 - `GET|POST /admin/staff` — 管理者専用のスタッフ参照・追加
 
 本番ではフロントとWorkerを同一サイト配下（例: `app.example.jp` と `api.example.jp`）で提供するのが推奨です。異なるサイト間のCookieはiOS/Safariの追跡防止で遮断される場合があります。
