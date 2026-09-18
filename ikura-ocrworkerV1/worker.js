@@ -6,7 +6,8 @@ const MAX_TOKENS = 64;
 const MAX_TOKENS_FULL = 300;
 const SESSION_COOKIE = "__Host-ikura_session";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const PIN_ITERATIONS = 120000;
+// Cloudflare Workers Web Crypto supports PBKDF2 iteration counts up to 100,000.
+const PIN_ITERATIONS = 100000;
 const LOGIN_WINDOW_SECONDS = 10 * 60;
 const LOGIN_FAILURE_LIMIT = 5;
 const LOGIN_BLOCK_SECONDS = 15 * 60;
