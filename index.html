@@ -262,6 +262,30 @@
     <div class="modal-title">🗂 カタログ登録モード</div>
     <div class="modal-sub">登録先のトレカ カテゴリID（1エキスパンション分）を指定してください。RECOREのカテゴリマスタと照合します。存在しないIDでは開始できません。</div>
     <div>
+      <div class="field-label">カードタイトル</div>
+      <select id="card-title-select">
+        <option>ポケモンカード</option>
+        <option>ワンピースカード</option>
+        <option>遊戯王OCG</option>
+        <option>デュエルマスターズ</option>
+        <option>ドラゴンボールダイバーズ</option>
+        <option>ガンダムアーセナルベース</option>
+        <option>ホロライブOCG</option>
+        <option>デジモンカード</option>
+        <option>ユニオンアリーナ</option>
+        <option>ドラゴンボールFW</option>
+        <option>ウルトラマン</option>
+        <option>ガンダムカードゲーム</option>
+        <option>XrossStars</option>
+        <option>シャドウバース</option>
+        <option>バトルスピリッツ</option>
+        <option>ホロライブ</option>
+        <option>クロススターズ</option>
+        <option>MTG</option>
+        <option>ディズニーロルカナ</option>
+      </select>
+    </div>
+    <div>
       <div class="field-label">カテゴリID</div>
       <input type="text" id="cat-id-input" inputmode="numeric" placeholder="例: 123" autocomplete="off">
     </div>
@@ -290,6 +314,7 @@
   var connectionApiKeySaved = false;
   var mode = 'bas';              // 'bas'=買取 / 'big'=店間移動 / 'catalog'=カタログ登録
   var defaultCategoryId = null;  // カタログ登録: 直近入力を記憶してプリフィル
+  var selectedCardTitle = 'ポケモンカード';
   var stream = null;
   var selectedProducts = [];     // bas/big=ケース対象 / catalog=登録済み一覧
   var toastTimer = null;
@@ -507,6 +532,7 @@
     el('mode-panel').style.display = 'none';
     el('cat-modal').classList.add('show');
     el('cat-id-input').value = (defaultCategoryId != null ? defaultCategoryId : '');
+    el('card-title-select').value = selectedCardTitle;
     el('cat-result').innerHTML = '';
     el('cat-start').style.display = 'none';
     verifiedCategoryId = null;
@@ -541,6 +567,8 @@
   function startCatalog() {
     if (verifiedCategoryId == null) { showToast('先にカテゴリを照合してください', 'error'); return; }
     defaultCategoryId = verifiedCategoryId; // セッション固定
+    selectedCardTitle = el('card-title-select').value;
+    applyCardPreset(selectedCardTitle);
     closeCatModal();
     enterScan('catalog');
   }
@@ -649,13 +677,34 @@
   // jscanify の「最大輪郭=紙」という判定は、プレイマットの柄やカード内の枠を
   // 誤検出しても成功扱いになる。カード比率・面積・中央位置・直角度を採点し、
   // 信頼度が低い場合はユーザーが合わせたガイド枠を使う。
+  var CARD_PRESETS = {
+    'ポケモンカード': [63, 88], 'ワンピースカード': [63, 88],
+    '遊戯王OCG': [59, 86], 'デュエルマスターズ': [63, 88],
+    'ドラゴンボールダイバーズ': [63, 88], 'ガンダムアーセナルベース': [59, 86],
+    'ホロライブOCG': [63, 88], 'デジモンカード': [63, 88],
+    'ユニオンアリーナ': [63, 88], 'ドラゴンボールFW': [63, 88],
+    'ウルトラマン': [63, 88], 'ガンダムカードゲーム': [63, 88],
+    'XrossStars': [63, 88], 'シャドウバース': [63, 88],
+    'バトルスピリッツ': [63, 88], 'ホロライブ': [63, 88],
+    'クロススターズ': [63, 88], 'MTG': [63, 88],
+    'ディズニーロルカナ': [63, 88]
+  };
   var CARD_RATIO = 63 / 88;
   // RECORE側で再縮小されても文字と細線が残るよう、従来の約1.55倍で生成する。
   var CARD_WIDTH = 1260;
   var CARD_HEIGHT = 1760;
   var CARD_GUIDE_TO_FRAME = 56 / 82;
-  // 検出輪郭ぴったりで切ると外枠のアンチエイリアスまで欠けるため、各辺を1.5%広げる。
-  var CARD_EDGE_SAFETY = 0.015;
+  // 外枠を残しつつ、斜め撮影時に安全マージンが傾きを増幅しない範囲に抑える。
+  var CARD_EDGE_SAFETY = 0.006;
+
+  function applyCardPreset(title) {
+    var size = CARD_PRESETS[title] || [63, 88];
+    CARD_RATIO = size[0] / size[1];
+    CARD_WIDTH = Math.round(CARD_HEIGHT * CARD_RATIO);
+    var ratio = size[0] + ' / ' + size[1];
+    el('scan-frame').style.aspectRatio = ratio;
+    el('card-guide').style.aspectRatio = ratio;
+  }
 
   function loadScannerScript(src) {
     return new Promise(function(resolve, reject) {
@@ -704,6 +753,25 @@
     return Math.max(0, 1 - Math.abs((ax * bx + ay * by) / denom));
   }
 
+  function normalizeAngleDegrees(angle) {
+    while (angle > 90) angle -= 180;
+    while (angle < -90) angle += 180;
+    return angle;
+  }
+
+  function edgeAngleDegrees(a, b) {
+    return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+  }
+
+  function cornerAngleDeviation(prev, current, next) {
+    var ax = prev.x - current.x, ay = prev.y - current.y;
+    var bx = next.x - current.x, by = next.y - current.y;
+    var denom = Math.hypot(ax, ay) * Math.hypot(bx, by);
+    if (!denom) return 90;
+    var cosine = Math.max(-1, Math.min(1, (ax * bx + ay * by) / denom));
+    return Math.abs(90 - Math.acos(cosine) * 180 / Math.PI);
+  }
+
   function scoreCardQuad(corners, imageWidth, imageHeight) {
     var tl = corners.topLeftCorner, tr = corners.topRightCorner;
     var bl = corners.bottomLeftCorner, br = corners.bottomRightCorner;
@@ -733,10 +801,24 @@
     var aspectScore = Math.max(0, 1 - Math.abs(Math.log(aspect / CARD_RATIO)) / Math.log(1.65));
     var areaScore = Math.max(0, 1 - Math.abs(areaRatio - 0.46) / 0.36);
     var centerScore = Math.max(0, 1 - centerDistance / 0.48);
-    var angleScore = (
-      cornerRightAngleScore(bl, tl, tr) + cornerRightAngleScore(tl, tr, br) +
-      cornerRightAngleScore(tr, br, bl) + cornerRightAngleScore(br, bl, tl)
-    ) / 4;
+    var topTilt = normalizeAngleDegrees(edgeAngleDegrees(tl, tr));
+    var bottomTilt = normalizeAngleDegrees(edgeAngleDegrees(bl, br));
+    var leftTilt = normalizeAngleDegrees(edgeAngleDegrees(tl, bl) - 90);
+    var rightTilt = normalizeAngleDegrees(edgeAngleDegrees(tr, br) - 90);
+    var rotation = (topTilt + bottomTilt + leftTilt + rightTilt) / 4;
+    var parallelError = Math.max(
+      Math.abs(normalizeAngleDegrees(topTilt - bottomTilt)),
+      Math.abs(normalizeAngleDegrees(leftTilt - rightTilt))
+    );
+    var maxRightAngleDeviation = Math.max(
+      cornerAngleDeviation(bl, tl, tr), cornerAngleDeviation(tl, tr, br),
+      cornerAngleDeviation(tr, br, bl), cornerAngleDeviation(br, bl, tl)
+    );
+    // ガイド内ではカードをほぼ正立させる前提。ここを外れた輪郭は内枠などの誤検出とみなす。
+    if (Math.abs(rotation) > 3 || parallelError > 8 || maxRightAngleDeviation > 14) return null;
+    var rightAngleScore = Math.max(0, 1 - maxRightAngleDeviation / 14);
+    var parallelScore = Math.max(0, 1 - parallelError / 8);
+    var rotationScore = Math.max(0, 1 - Math.abs(rotation) / 3);
     var edgeMargin = Math.min(
       tl.x, tr.x, bl.x, br.x,
       imageWidth - tl.x, imageWidth - tr.x, imageWidth - bl.x, imageWidth - br.x,
@@ -746,9 +828,13 @@
     var edgeScore = Math.min(1, Math.max(0, edgeMargin / 0.035));
 
     return {
-      score: aspectScore * 0.36 + areaScore * 0.24 + centerScore * 0.20 + angleScore * 0.15 + edgeScore * 0.05,
+      score: aspectScore * 0.28 + areaScore * 0.18 + centerScore * 0.14 +
+        rightAngleScore * 0.18 + parallelScore * 0.12 + rotationScore * 0.06 + edgeScore * 0.04,
       areaRatio: areaRatio,
-      aspect: aspect
+      aspect: aspect,
+      rotation: rotation,
+      parallelError: parallelError,
+      rightAngleDeviation: maxRightAngleDeviation
     };
   }
 
@@ -760,7 +846,7 @@
       var contour = contours.get(i);
       var perimeter = cv.arcLength(contour, true);
       var approx = new cv.Mat();
-      cv.approxPolyDP(contour, approx, perimeter * 0.025, true);
+      cv.approxPolyDP(contour, approx, perimeter * 0.018, true);
       if (approx.rows === 4 && cv.isContourConvex(approx)) {
         var points = [];
         for (var p = 0; p < approx.data32S.length; p += 2) {
@@ -790,24 +876,31 @@
     cv.cvtColor(work, gray, cv.COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
+    var enhanced = new cv.Mat();
+    cv.equalizeHist(gray, enhanced);
     var candidates = [];
-    var thresholds = [[35, 120], [70, 210]];
     var kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
-    thresholds.forEach(function(pair) {
-      var edges = new cv.Mat();
-      cv.Canny(gray, edges, pair[0], pair[1]);
-      cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
-      collectCardQuads(edges, work.cols, work.rows, candidates);
-      edges.delete();
+    [
+      { image: gray, thresholds: [[12, 45], [25, 85], [35, 120], [70, 210]] },
+      { image: enhanced, thresholds: [[18, 65], [35, 120], [70, 210]] }
+    ].forEach(function(pass) {
+      pass.thresholds.forEach(function(pair) {
+        var edges = new cv.Mat();
+        cv.Canny(pass.image, edges, pair[0], pair[1]);
+        cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
+        collectCardQuads(edges, work.cols, work.rows, candidates);
+        edges.delete();
+      });
     });
 
     kernel.delete();
+    enhanced.delete();
     gray.delete();
     work.delete();
     if (!candidates.length) return null;
     candidates.sort(function(a, b) { return b.metrics.score - a.metrics.score; });
     var best = candidates[0];
-    if (best.metrics.score < 0.62) return null;
+    if (best.metrics.score < 0.72) return null;
 
     var c = best.corners;
     Object.keys(c).forEach(function(key) {
@@ -877,7 +970,8 @@
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    var x = 70, y = 100, w = CARD_WIDTH, h = CARD_HEIGHT, radius = 34;
+    var x = Math.round((canvas.width - CARD_WIDTH) / 2), y = 100;
+    var w = CARD_WIDTH, h = CARD_HEIGHT, radius = Math.round(34 * CARD_WIDTH / 1260);
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
