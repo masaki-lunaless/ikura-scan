@@ -694,8 +694,9 @@
   var CARD_WIDTH = 1260;
   var CARD_HEIGHT = 1760;
   var CARD_GUIDE_TO_FRAME = 56 / 82;
-  // 外枠を残しつつ、斜め撮影時に安全マージンが傾きを増幅しない範囲に抑える。
-  var CARD_EDGE_SAFETY = 0.006;
+  // 検出外周の外側は取らない。枠切れ防止は出力側の極小白余白で行う。
+  var CARD_EDGE_SAFETY = 0;
+  var CARD_OUTPUT_INSET = 0.004;
 
   function applyCardPreset(title) {
     var size = CARD_PRESETS[title] || [63, 88];
@@ -799,7 +800,8 @@
     if (centerDistance > 0.48) return null;
 
     var aspectScore = Math.max(0, 1 - Math.abs(Math.log(aspect / CARD_RATIO)) / Math.log(1.65));
-    var areaScore = Math.max(0, 1 - Math.abs(areaRatio - 0.46) / 0.36);
+    // カードガイドは外側撮影範囲の約65%高なので、面積は約42%が中心。
+    var areaScore = Math.max(0, 1 - Math.abs(areaRatio - 0.42) / 0.34);
     var centerScore = Math.max(0, 1 - centerDistance / 0.48);
     var topTilt = normalizeAngleDegrees(edgeAngleDegrees(tl, tr));
     var bottomTilt = normalizeAngleDegrees(edgeAngleDegrees(bl, br));
@@ -814,17 +816,22 @@
       cornerAngleDeviation(bl, tl, tr), cornerAngleDeviation(tl, tr, br),
       cornerAngleDeviation(tr, br, bl), cornerAngleDeviation(br, bl, tl)
     );
-    // ガイド内ではカードをほぼ正立させる前提。ここを外れた輪郭は内枠などの誤検出とみなす。
-    if (Math.abs(rotation) > 3 || parallelError > 8 || maxRightAngleDeviation > 14) return null;
-    var rightAngleScore = Math.max(0, 1 - maxRightAngleDeviation / 14);
-    var parallelScore = Math.max(0, 1 - parallelError / 8);
-    var rotationScore = Math.max(0, 1 - Math.abs(rotation) / 3);
+    // ±3°超は通常成功にせず、同じ一回の検出内で「再補正候補」として扱う。
+    // OpenCVを二周させるとiPhone Safariでメモリ失敗するため、再検出は行わない。
+    var strictGeometry = Math.abs(rotation) <= 3 && parallelError <= 8 && maxRightAngleDeviation <= 14;
+    var recoverableGeometry = Math.abs(rotation) <= 13 && parallelError <= 16 && maxRightAngleDeviation <= 25;
+    if (!recoverableGeometry) return null;
+    var rightAngleScore = Math.max(0, 1 - maxRightAngleDeviation / 25);
+    var parallelScore = Math.max(0, 1 - parallelError / 16);
+    var rotationScore = Math.max(0, 1 - Math.abs(rotation) / 13);
     var edgeMargin = Math.min(
       tl.x, tr.x, bl.x, br.x,
       imageWidth - tl.x, imageWidth - tr.x, imageWidth - bl.x, imageWidth - br.x,
       tl.y, tr.y, bl.y, br.y,
       imageHeight - tl.y, imageHeight - tr.y, imageHeight - bl.y, imageHeight - br.y
     ) / Math.min(imageWidth, imageHeight);
+    // 外側撮影範囲には十分な余白がある。画面端そのものはカードとして採用しない。
+    if (edgeMargin < 0.008) return null;
     var edgeScore = Math.min(1, Math.max(0, edgeMargin / 0.035));
 
     return {
@@ -834,7 +841,8 @@
       aspect: aspect,
       rotation: rotation,
       parallelError: parallelError,
-      rightAngleDeviation: maxRightAngleDeviation
+      rightAngleDeviation: maxRightAngleDeviation,
+      strict: strictGeometry
     };
   }
 
@@ -844,19 +852,51 @@
     cv.findContours(binary, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
     for (var i = 0; i < contours.size(); i++) {
       var contour = contours.get(i);
-      var perimeter = cv.arcLength(contour, true);
-      var approx = new cv.Mat();
-      cv.approxPolyDP(contour, approx, perimeter * 0.018, true);
-      if (approx.rows === 4 && cv.isContourConvex(approx)) {
-        var points = [];
-        for (var p = 0; p < approx.data32S.length; p += 2) {
-          points.push({ x: approx.data32S[p], y: approx.data32S[p + 1] });
-        }
-        var corners = orderCorners(points);
-        var metrics = scoreCardQuad(corners, imageWidth, imageHeight);
-        if (metrics) candidates.push({ corners: corners, metrics: metrics });
+      var contourAreaRatio = Math.abs(cv.contourArea(contour)) / (imageWidth * imageHeight);
+      // 内部の文字や柄はここで除き、丸角外周候補だけを詳細に調べる。
+      if (contourAreaRatio < 0.055 || contourAreaRatio > 0.90) {
+        contour.delete();
+        continue;
       }
-      approx.delete();
+      var perimeter = cv.arcLength(contour, true);
+      var foundQuad = false;
+      // 丸角や光沢で外周が少し崩れても四隅まで簡略化できるよう、精度を段階的に変える。
+      [0.012, 0.018, 0.026, 0.038].some(function(epsilon) {
+        var approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, perimeter * epsilon, true);
+        if (approx.rows === 4 && cv.isContourConvex(approx)) {
+          var points = [];
+          for (var p = 0; p < approx.data32S.length; p += 2) {
+            points.push({ x: approx.data32S[p], y: approx.data32S[p + 1] });
+          }
+          var corners = orderCorners(points);
+          var metrics = scoreCardQuad(corners, imageWidth, imageHeight);
+          if (metrics) {
+            candidates.push({ corners: corners, metrics: metrics, method: 'quad' });
+            foundQuad = true;
+          }
+        }
+        approx.delete();
+        return foundQuad;
+      });
+
+      // 外周が閉じない・丸角が強い場合の保険。輪郭を包む最小回転矩形で角度と余白を除去する。
+      if (!foundQuad && contourAreaRatio >= 0.10) {
+        var rotated = cv.minAreaRect(contour);
+        var rotatedPoints = cv.RotatedRect.points(rotated).map(function(point) {
+          return { x: point.x, y: point.y };
+        });
+        var rectCorners = orderCorners(rotatedPoints);
+        var rectMetrics = scoreCardQuad(rectCorners, imageWidth, imageHeight);
+        if (rectMetrics) {
+          var fillRatio = contourAreaRatio / rectMetrics.areaRatio;
+          if (fillRatio >= 0.62) {
+            // 台形を保持できるquadを優先し、回転矩形はフォールバックに留める。
+            rectMetrics.score -= 0.07;
+            candidates.push({ corners: rectCorners, metrics: rectMetrics, method: 'rotated-rect' });
+          }
+        }
+      }
       contour.delete();
     }
     contours.delete();
@@ -899,14 +939,22 @@
     work.delete();
     if (!candidates.length) return null;
     candidates.sort(function(a, b) { return b.metrics.score - a.metrics.score; });
-    var best = candidates[0];
-    if (best.metrics.score < 0.72) return null;
+    var strictCandidates = candidates.filter(function(candidate) { return candidate.metrics.strict; });
+    var best = strictCandidates.length && strictCandidates[0].metrics.score >= 0.70
+      ? strictCandidates[0] : candidates[0];
+    if (!best || best.metrics.score < 0.58) return null;
+    var recovered = !best.metrics.strict || best.method === 'rotated-rect';
 
     var c = best.corners;
     Object.keys(c).forEach(function(key) {
       c[key] = { x: c[key].x / scale, y: c[key].y / scale };
     });
-    return { corners: expandCardCorners(c, sourceCanvas.width, sourceCanvas.height), score: best.metrics.score };
+    return {
+      corners: expandCardCorners(c, sourceCanvas.width, sourceCanvas.height),
+      score: best.metrics.score,
+      recovered: recovered,
+      method: best.method
+    };
   }
 
   function expandCardCorners(corners, sourceWidth, sourceHeight) {
@@ -936,11 +984,17 @@
       corners.bottomLeftCorner.x, corners.bottomLeftCorner.y,
       corners.bottomRightCorner.x, corners.bottomRightCorner.y
     ]);
+    var insetX = Math.max(3, Math.round(CARD_WIDTH * CARD_OUTPUT_INSET));
+    var insetY = Math.max(3, Math.round(CARD_HEIGHT * CARD_OUTPUT_INSET));
     var dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, CARD_WIDTH, 0, 0, CARD_HEIGHT, CARD_WIDTH, CARD_HEIGHT
+      insetX, insetY, CARD_WIDTH - insetX, insetY,
+      insetX, CARD_HEIGHT - insetY, CARD_WIDTH - insetX, CARD_HEIGHT - insetY
     ]);
     var transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
-    cv.warpPerspective(src, dst, transform, new cv.Size(CARD_WIDTH, CARD_HEIGHT), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
+    cv.warpPerspective(
+      src, dst, transform, new cv.Size(CARD_WIDTH, CARD_HEIGHT),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255)
+    );
     var canvas = document.createElement('canvas');
     cv.imshow(canvas, dst);
     src.delete(); dst.delete(); srcPoints.delete(); dstPoints.delete(); transform.delete();
@@ -986,12 +1040,17 @@
     return canvas;
   }
 
-  // カード四隅を検出→台形補正。低信頼時はガイド枠を使い、誤検出を採用しない。
+  // カード四隅を一回で検出→台形補正。Safariのメモリを圧迫する二段検出はしない。
   async function extractCardCanvas(sourceCanvas) {
     await loadScanner();
     var detection = detectCardCorners(sourceCanvas);
     var card = detection ? warpCardCanvas(sourceCanvas, detection.corners) : guideCropCanvas(sourceCanvas);
-    return { canvas: makeWhiteCatalogCanvas(card), automatic: !!detection, score: detection ? detection.score : 0 };
+    return {
+      canvas: makeWhiteCatalogCanvas(card),
+      automatic: !!detection,
+      recovered: detection ? detection.recovered : false,
+      score: detection ? detection.score : 0
+    };
   }
 
   // ===== 撮影 / 手入力 =====
@@ -1012,7 +1071,9 @@
       try {
         var extraction = await extractCardCanvas(outer);
         lastCardImage = extraction.canvas.toDataURL('image/jpeg', 0.98);
-        if (!extraction.automatic) {
+        if (extraction.recovered) {
+          showToast('外周と傾きを補正しました', '');
+        } else if (!extraction.automatic) {
           showToast('輪郭が不鮮明なため、ガイド枠で切り出しました', '');
         }
       } catch (e) {
